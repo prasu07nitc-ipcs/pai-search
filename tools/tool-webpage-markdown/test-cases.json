@@ -1,0 +1,64 @@
+[
+  {
+    "case_id": "invalid-url",
+    "input": {
+      "url": "not-a-url",
+      "raw_input": "Extract webpage Markdown from not-a-url"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "credentials-rejected",
+    "input": {
+      "url": "https://user:password@example.com/",
+      "raw_input": "Extract webpage Markdown from https://user:password@example.com/"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "blocked-local",
+    "input": {
+      "url": "http://127.0.0.1/",
+      "raw_input": "Extract webpage Markdown from http://127.0.0.1/"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "blocked_address"
+    }
+  },
+  {
+    "case_id": "balanced",
+    "input": {
+      "url": "https://example.com/",
+      "raw_input": "Extract webpage Markdown from https://example.com/"
+    },
+    "expected": {
+      "status": "ok",
+      "markdown_contains": [
+        "This domain is for use in documentation examples"
+      ]
+    }
+  },
+  {
+    "case_id": "compare",
+    "input": {
+      "url": "https://example.com/",
+      "mode": "compare",
+      "raw_input": "Extract webpage Markdown from https://example.com/"
+    },
+    "expected": {
+      "status": "ok",
+      "variants_nonempty": [
+        "balanced",
+        "precision",
+        "recall"
+      ]
+    }
+  }
+]

@@ -1,0 +1,93 @@
+[
+  {
+    "case_id": "invalid-url",
+    "input": {
+      "url": "not-a-url",
+      "raw_input": "Extract webpage metadata from not-a-url"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "blocked-local-address",
+    "input": {
+      "url": "http://127.0.0.1/",
+      "raw_input": "Extract webpage metadata from http://127.0.0.1/"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "blocked_address"
+    }
+  },
+  {
+    "case_id": "article-keywords-and-dates",
+    "input": {
+      "url": "https://www.thehindu.com/news/cities/chennai/pm-modi-and-tn-cm-vijay-flag-off-chennai-metro-rails-first-train-for-phase-ii-project-take-a-ride-between-porur-poonamallee/article71570925.ece",
+      "raw_input": "Extract webpage metadata from https://www.thehindu.com/news/cities/chennai/pm-modi-and-tn-cm-vijay-flag-off-chennai-metro-rails-first-train-for-phase-ii-project-take-a-ride-between-porur-poonamallee/article71570925.ece"
+    },
+    "expected": {
+      "status": "ok",
+      "required_metadata": [
+        "keywords",
+        "datePublished",
+        "dateModified"
+      ]
+    }
+  },
+  {
+    "case_id": "ogp-preview",
+    "input": {
+      "url": "https://ogp.me/",
+      "raw_input": "Extract webpage metadata from https://ogp.me/"
+    },
+    "expected": {
+      "status": "ok",
+      "required_properties": [
+        "og:title",
+        "og:description",
+        "og:image",
+        "og:url"
+      ]
+    }
+  },
+  {
+    "case_id": "example-no-metadata",
+    "input": {
+      "url": "https://example.com/",
+      "raw_input": "Extract webpage metadata from https://example.com/"
+    },
+    "expected": {
+      "status": "ok",
+      "property_values": {
+        "og:title": null,
+        "og:description": null,
+        "og:image": null,
+        "og:url": null,
+        "og:site_name": null
+      },
+      "metadata_values": {
+        "keywords": null,
+        "datePublished": null,
+        "dateModified": null
+      }
+    }
+  },
+  {
+    "case_id": "ogp-preview",
+    "input": {
+      "url": "https://ogp.me/",
+      "raw_input": "Extract webpage metadata from https://ogp.me/"
+    },
+    "expected": {
+      "status": "ok",
+      "required_properties": [
+        "og:title",
+        "og:description",
+        "og:image",
+        "og:url"
+      ]
+    }
+  }
+]
