@@ -193,7 +193,7 @@ def _extract_markdown(
     Defaults retain images, links, tables, and formatting, exclude comments,
     enable backup extraction and disable deduplication. Requires Trafilatura 2.x.
     Network budget: 15 seconds; response limit: 2 MiB; runner timeout: 60 seconds.
-    Saves UTF-8 Markdown directly in tool-local outputs/output.txt. Compare joins
+    Saves UTF-8 Markdown directly in tool-local outputs/<run_id>.txt. Compare joins
     nonempty variants with labeled headings; single modes preserve extracted text.
     Supported Markdown structure is retained; exact CSS/font layout is not.
     Expected failures return structured errors; unexpected exceptions propagate.
@@ -245,8 +245,12 @@ def _extract_markdown(
 
 
 def _write_output(content: str) -> str:
-    """Atomically replace output.txt using a pinned tool-local directory."""
+    """Atomically replace <run_id>.txt using a pinned tool-local directory."""
     tool_root = Path(__file__).resolve().parent
+    run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
+    if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+        raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
+    filename = f"{run_id}.txt"
     descriptor = None
     temporary = None
     try:
@@ -259,11 +263,11 @@ def _write_output(content: str) -> str:
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
-        os.replace(name, "output.txt", src_dir_fd=descriptor, dst_dir_fd=descriptor)
+        os.replace(name, filename, src_dir_fd=descriptor, dst_dir_fd=descriptor)
         temporary = None
-        return f"{tool_root.name}/outputs/output.txt"
+        return f"{tool_root.name}/outputs/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save output.txt in the tool outputs directory.") from exc
+        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool outputs directory.") from exc
     finally:
         if temporary is not None:
             try:
@@ -282,12 +286,12 @@ def extract_markdown(
     include_links: bool = True,
     include_tables: bool = True,
 ) -> dict:
-    """Extract Markdown and save it directly to outputs/output.txt.
+    """Extract Markdown and save it directly to outputs/<run_id>.txt.
 
     raw_input is the caller's original request, required and never interpreted.
     URL/options constraints match _extract_markdown; defaults are recorded in
     input.processed_input. Expected failures return output=null; successful paths
-    are relative to tools/. Success atomically replaces the previous output.txt.
+    are relative to tools/. Success atomically replaces the previous <run_id>.txt.
     """
     processed = {"url": url, "mode": mode, "include_images": include_images,
                  "include_links": include_links, "include_tables": include_tables}

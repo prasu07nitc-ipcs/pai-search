@@ -18,9 +18,8 @@ class OutputSandboxTests(unittest.TestCase):
                       'expected': {'status': 'ok', 'markdown_contains': ['documentation examples']}})
         log = directory / 'run.log'
         before = log.read_bytes() if log.exists() else None
-        target = directory / 'outputs' / 'output.txt'
         for case in cases:
-            previous = target.read_bytes() if target.exists() else None
+            previous = {p.name: p.read_bytes() for p in (directory / 'outputs').glob('*.txt')}
             with tempfile.TemporaryDirectory() as temporary:
                 case_path = Path(temporary) / 'cases.json'
                 case_path.write_text(json.dumps([case]))
@@ -34,9 +33,12 @@ class OutputSandboxTests(unittest.TestCase):
             self.assertEqual(actual['output_format'], 'markdown')
             if actual['status'] != 'ok':
                 self.assertIsNone(actual['output'])
-                self.assertEqual(target.read_bytes() if target.exists() else None, previous)
+                self.assertEqual({p.name: p.read_bytes() for p in (directory / 'outputs').glob('*.txt')}, previous)
                 continue
-            self.assertEqual(actual['output'], directory.name + '/outputs/output.txt')
+            self.assertEqual(actual['output'], directory.name + '/outputs/' + record['run_id'] + '.txt')
+            target = runner.ROOT / actual['output']
+            for name, content in previous.items():
+                self.assertEqual((directory / 'outputs' / name).read_bytes(), content)
             self.assertFalse(target.is_symlink())
             content = target.read_text(encoding='utf-8')
             self.assertIn('documentation examples', content)
@@ -107,9 +109,9 @@ def probe() -> dict:
         checks['hardlink'] = True
     else:
         checks['hardlink'] = False
-    (root / 'outputs' / 'output.txt').write_text('{}')
+    (root / 'outputs' / (os.environ['PROJECT_TOOL_RUN_ID'] + '.txt')).write_text('{}')
     return {'input': {'raw_input': 'sandbox probe', 'processed_input': {}},
-            'output': root.name + '/outputs/output.txt', 'status': 'ok', 'error': None,
+            'output': root.name + '/outputs/' + os.environ['PROJECT_TOOL_RUN_ID'] + '.txt', 'status': 'ok', 'error': None,
             'output_format': 'json', 'meta_data': {'checks': checks}}
 ''')
             (directory / 'validator.py').write_text('''

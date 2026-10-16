@@ -20,7 +20,7 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 - Keep `TOOL.md` as the concise discovery entry point. Identify the Python function entry point and link to `[AGENTS.md](AGENTS.md)` for detailed instructions.
 - Keep the detailed purpose, input and output contracts, validation, execution rules, required configuration, dependencies, permissions, and side effects in the tool's `AGENTS.md`.
 - Implement the capability as a Python function in `tool.py`, with explicit typed parameters, documented constraints and defaults, and a structured result serializable to JSON. Define expected errors and failure behavior.
-- Every tool returns a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`. `input` contains exactly `raw_input` (the original user request, supplied explicitly as a required string argument) and `processed_input` (an object containing the tool arguments with defaults applied, excluding `raw_input`). Natural-language interpretation remains with the caller; tools validate explicit arguments. `output` is the selected tool’s `outputs/output.txt` path relative to `tools/`, or null on failure. `output_format` is a non-empty string identifying the file content format (for example `json` or `markdown`), also present on failure. A successful run atomically replaces that tool’s previous `output.txt` with its tool-specific payload; a failed run leaves the previous file intact where possible. `meta_data` is an object containing other tool-specific metadata. `status` is `ok` or `error`. For `ok`, `error` is null; for `error`, it is an object with exactly non-empty string `code` and `message` fields. The shared runner enforces the common envelope; each tool owns its saved payload and metadata contract.
+- Every tool returns a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`. `input` contains exactly `raw_input` (the original user request, supplied explicitly as a required string argument) and `processed_input` (an object containing the tool arguments with defaults applied, excluding `raw_input`). Natural-language interpretation remains with the caller; tools validate explicit arguments. `output` is the selected tool’s `outputs/<run_id>.txt` path relative to `tools/`, or null on failure. `output_format` is a non-empty string identifying the file content format (for example `json` or `markdown`), also present on failure. A successful run atomically writes its tool-specific payload to `<run_id>.txt`; different run IDs retain separate files, while repeated run IDs replace the same file; a failed run leaves the previous file intact where possible. `meta_data` is an object containing other tool-specific metadata. `status` is `ok` or `error`. For `ok`, `error` is null; for `error`, it is an object with exactly non-empty string `code` and `message` fields. The shared runner enforces the common envelope; each tool owns its saved payload and metadata contract.
 
 - Treat the function signature and types as the authoritative callable interface. Derive machine-readable schemas from that interface where practical and keep documentation consistent with it.
 - Make each tool's contracts self-contained. Do not require a particular producing or consuming tool or designate another tool as contract authority.
@@ -42,7 +42,11 @@ array order and supplied values remain significant. Omitted defaults are not
 expanded. Identical inputs share an ID but remain separate appended records;
 this is an input identifier, not a unique execution identifier. Historical
 production records remain unchanged and may lack `run_id`. Test-report UUID
-run IDs and input hashes retain their existing behavior.
+run IDs and input hashes retain their existing behavior. Output filenames use
+the respective production or test record run_id. The runner explicitly supplies
+this ID to workers as PROJECT_TOOL_RUN_ID configuration before tool import;
+tools must validate it before constructing the output filename. Existing output
+files and historical log records remain unchanged.
 
 The production and test result logs use JSON Lines. The parent locks appends,
 flushes them to disk, and checks test run-ID uniqueness while holding the lock.

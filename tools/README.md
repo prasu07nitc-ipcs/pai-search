@@ -130,7 +130,7 @@ Every tool returns a JSON-serializable object with exactly six fields:
     "raw_input": "Extract metadata from https://example.com/",
     "processed_input": {"url": "https://example.com/"}
   },
-  "output": "tool-webpage-og-crawler/outputs/output.txt",
+  "output": "tool-webpage-og-crawler/outputs/<run_id>.txt",
   "output_format": "json",
   "status": "ok",
   "error": null,
@@ -143,13 +143,13 @@ Every tool returns a JSON-serializable object with exactly six fields:
 `raw_input`. Interpretation remains outside the tools. Rejected argument values
 are echoed for diagnosis rather than represented as validated.
 
-`output` points to the selected tool’s `outputs/output.txt`, relative to `tools/`,
+`output` points to the selected tool’s `outputs/<run_id>.txt`, relative to `tools/`,
 or is null on failure. `output_format` identifies its content format at the top
 level: the OG tool writes JSON text (`json`); the Markdown tool writes Markdown
 content directly (`markdown`). Compare mode combines nonempty variants as labeled
 Markdown sections. The file is atomically replaced on success; failed runs leave
-the previous result intact where possible. Concurrent runs use last replacement
-wins semantics, so this path is not a historical artifact. `meta_data` contains
+the previous result intact where possible. Different run IDs retain separate files. Repeated production inputs share an ID
+and replace the same file; concurrent runs sharing an ID use last replacement wins. `meta_data` contains
 other tool-specific attributes. `status` is `ok` or `error`; `error` is null on
 success or exactly non-empty strings `code` and `message` on failure. Non-finite
 JSON numbers are rejected. The runner enforces the envelope; tools own content
@@ -178,7 +178,7 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
 The function returns descriptive failure messages, or an empty list when all
 checks pass. It owns tool-specific output and expectation checks. It must not
 mutate arguments, make network requests, write files, modify the environment, or
-launch subprocesses. It may read its own output.txt to validate its content. Supported expectation fields are documented by each tool.
+launch subprocesses. It may read its own <run_id>.txt to validate its content. Supported expectation fields are documented by each tool.
 
 The runner checks the validator's presence and source signature during discovery,
 including production invocations. **It imports and calls the validator only in
@@ -293,4 +293,4 @@ limits, HTML parsing, and JSON-LD extraction. See its
 [instructions](tool-webpage-og-crawler/AGENTS.md) for exact behavior and limits.
 
 [tool-webpage-markdown](tool-webpage-markdown/TOOL.md) extracts main article content
-in balanced, precision, recall, or compare mode. Its output.txt contains Markdown directly, with labeled sections in compare mode.
+in balanced, precision, recall, or compare mode. Its <run_id>.txt contains Markdown directly, with labeled sections in compare mode.

@@ -45,20 +45,20 @@ the tool validates supplied arguments. Rejected values are echoed for diagnosis.
 
 `status` is `ok` or `error`; `error` is null on success or contains exactly
 non-empty string `code` and `message` fields on failure. `output` is null on
-failure and `tool-webpage-markdown/outputs/output.txt` on success, relative to
+failure and `tool-webpage-markdown/outputs/<run_id>.txt` on success, relative to
 `tools/`. `output_format` is `markdown`, including on failure, and sits beside
 `output` at the top level. `meta_data` contains `requested_url` (supplied URL)
 and `final_url` (last attempted URL, null before a request; blocked redirects
 are not recorded as attempted).
 
-The UTF-8 file contains Markdown content directly, without a JSON wrapper. Each successful run replaces the same
-`output.txt`; it is a latest-result file, not an execution archive. A temporary
+The UTF-8 file contains Markdown content directly, without a JSON wrapper. Each successful run writes `<run_id>.txt`, using the runner-supplied
+`PROJECT_TOOL_RUN_ID` environment configuration. Different IDs retain separate
+files; repeated production inputs replace the same file. Tests use their test-report UUID. A temporary
 file is exclusively created inside the pinned outputs/ directory, flushed and
-synced, then atomically renamed to `output.txt` without following destination
+synced, then atomically renamed to `<run_id>.txt` without following destination
 symlinks. A write failure returns `output_write_error` with null output, preserves
 the previous result, and removes the temporary file where possible. Abrupt
-termination may leave temporary files. Concurrent successes use last replacement
-wins semantics; an earlier returned path may subsequently contain a newer result.
+termination may leave temporary files. Concurrent successes with the same ID use last replacement wins semantics.
 Existing historical output files are not deleted.
 
 `input.processed_input` contains exactly `url`, `mode`, `include_images`,
@@ -106,7 +106,7 @@ Only execute through the shared runner using the absolute project interpreter.
 The runner verifies sys.prefix, applies its macOS worker sandbox, validates inputs
 and the common six-field result contract, and restricts worker writes to this tool’s real outputs/ directory while blocking subprocesses.
 This tool does not itself establish sandbox enforcement. It reads installed
-packages, makes network requests, and writes only its output.txt and temporary replacement file; it
+packages, makes network requests, and writes only its <run_id>.txt and temporary replacement file; it
 does not change the environment. The parent runner prepares outputs/ using the
 generic `Output directory: outputs` capability in TOOL.md and rejects symlinks
 or hard-linked files there before execution. Its network helpers are local; it does not invoke or import other tools.
@@ -124,8 +124,8 @@ tools_root="$(pwd -P)/tools"
 
 `validator.py` exposes `check_result(value: dict, actual: dict, expected: dict) -> list[str]`.
 It checks the envelope, preserved raw input and applied defaults, mode/URL
-metadata, output_format, fixed path, saved Markdown, and error invariants. It
-reads only output.txt and performs no writes, network requests, or argument
+metadata, output_format, run-ID path, saved Markdown, and error invariants. It
+reads only <run_id>.txt and performs no writes, network requests, or argument
 mutation. Supported expectations:
 status (shared runner), error_code (exact), markdown_contains (list of literal
 substrings in single-mode Markdown), variants_nonempty (list of required nonempty
@@ -133,7 +133,7 @@ compare sections, identified by their variant headings). Unknown expectation fie
 
 `test-cases.json` includes input rejection and live extraction cases. Live pages
 can change; passing substring checks alone does not establish extraction quality.
-Tests also replace output.txt in outputs/; they never write
+Tests write their UUID-named <run_id>.txt in outputs/; they never write
 production result logs. Content, replacement, and sandbox tests are separate runner
 infrastructure checks. Run them only once dependencies are available, from the
 parent directory:

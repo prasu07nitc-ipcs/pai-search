@@ -38,9 +38,11 @@ class RunnerTests(unittest.TestCase):
 
     def test_shared_contract(self):
         good = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 1}},
-                'output': 'tool-example/outputs/output.txt', 'status': 'ok',
+                'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok',
                 'error': None, 'output_format': 'json', 'meta_data': {}}
         runner.validate_output(good)
+        with self.assertRaisesRegex(ValueError, 'execution run_id'):
+            runner.validate_output(good, 'tool-example', 'b' * 64)
         runner.validate_output(dict(good, status='error', output=None,
                                     error={'code': 'failed', 'message': 'Reason'}))
         bad = [{}, {'status': 'ok'}, dict(good, extra=1), dict(good, output=None),
@@ -117,7 +119,8 @@ class RunnerTests(unittest.TestCase):
 
 
     def test_production_output_and_test_isolation(self):
-        result = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 2}}, 'output': 'tool-example/outputs/output.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
+        result = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 2}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
+        result['output'] = 'tool-example/outputs/' + hashlib.sha256(b'{"count":2}').hexdigest() + '.txt'
         completed = subprocess.CompletedProcess([], 0, json.dumps(result), 'worker diagnostics\n')
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
              patch.object(runner.subprocess, 'run', return_value=completed) as execute:
@@ -131,15 +134,18 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(record['output'], result)
             self.assertEqual(set(record), {'run_id', 'executed_at', 'input', 'output', 'status', 'error'})
             self.assertEqual(record['run_id'], hashlib.sha256(b'{"count":2}').hexdigest())
-            runner.invoke('tool-example', {'count': 2}, test_run=True, timeout=5)
+            runner.invoke('tool-example', {'count': 2}, test_run=True, timeout=5, run_id=record['run_id'])
             self.assertEqual(log.read_bytes(), before)
             self.assertEqual(execute.call_args.kwargs['timeout'], 5)
 
     def test_production_run_id_is_input_hash_and_preserves_repeated_runs(self):
-        result = {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/output.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
-        completed = subprocess.CompletedProcess([], 0, json.dumps(result), '')
+        result = {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
+        def respond(*args, **kwargs):
+            payload = json.loads(kwargs['input'])
+            result['output'] = f"tool-example/outputs/{payload['run_id']}.txt"
+            return subprocess.CompletedProcess([], 0, json.dumps(result), '')
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
-             patch.object(runner.subprocess, 'run', return_value=completed):
+             patch.object(runner.subprocess, 'run', side_effect=respond):
             for value in ({'count': 2, 'label': 'தமிழ்'},
                           {'label': 'தமிழ்', 'count': 2},
                           {'count': 3, 'label': 'தமிழ்'}):
@@ -169,7 +175,7 @@ class RunnerTests(unittest.TestCase):
             self.assertIn('Worker diagnostics', stream.getvalue())
 
     def test_no_tool_specific_assertions_in_harness(self):
-        packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/output.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}, 'failed_checks': []}
+        packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}, 'failed_checks': []}
         cases = self.directory / 'cases.json'
         cases.write_text(json.dumps([{'case_id': 'generic', 'input': {'count': 1}, 'expected': {'status': 'ok'}}]))
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \

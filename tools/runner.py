@@ -158,7 +158,7 @@ def matches_type(value, annotation):
 
 
 @log_execution
-def validate_output(result):
+def validate_output(result, tool_name=None, run_id=None):
     if not isinstance(result, dict) or result.get("status") not in ("ok", "error") or "error" not in result:
         raise ValueError("Tool output must be an object with status ('ok'/'error') and error.")
     if set(result) != {"input", "output", "output_format", "status", "error", "meta_data"}:
@@ -174,9 +174,11 @@ def validate_output(result):
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
-                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/outputs/output\.txt", output) is None
+                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/outputs/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.txt", output) is None
                 or "/../" in output or "/./" in output):
-            raise ValueError("Successful output must reference tool outputs/output.txt relative to tools/.")
+            raise ValueError("Successful output must reference tool outputs/<run_id>.txt relative to tools/.")
+        if tool_name is not None and output != f"{tool_name}/outputs/{run_id}.txt":
+            raise ValueError("Output path must match the selected tool and execution run_id.")
     elif output is not None:
         raise ValueError("Failed tool output must be null.")
     error = result["error"]
@@ -217,7 +219,7 @@ def output_directory(directory):
 
 
 @log_execution
-def worker(tool_name, value, expected=None):
+def worker(tool_name, value, expected=None, run_id=None):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
@@ -272,6 +274,9 @@ def worker(tool_name, value, expected=None):
             os._exit(1)
         os.waitpid(child, 0)
         raise RuntimeError("Sandbox process restriction verification failed.")
+    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+        raise ValueError("Invalid execution run_id.")
+    os.environ["PROJECT_TOOL_RUN_ID"] = run_id
     # Keep tool prints away from the JSON transport on stdout.
     with contextlib.redirect_stdout(sys.stderr):
         module = load_module(directory / "tool.py", "project_" + tool_name.replace("-", "_"))
@@ -283,7 +288,7 @@ def worker(tool_name, value, expected=None):
             if name not in hints or not matches_type(argument, hints[name]):
                 raise ValueError(f"Incorrect type for argument {name}.")
         result = log_execution(function)(**value)
-        validate_output(result)
+        validate_output(result, tool_name, run_id)
         failures = []
         if expected is not None:
             if "status" in expected and result["status"] != expected["status"]:
@@ -303,7 +308,7 @@ def worker(tool_name, value, expected=None):
 
 
 @log_execution
-def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20):
+def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_id=None):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
@@ -315,8 +320,10 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20):
     if outputs is not None:
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
+    input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+    run_id = (run_id or str(uuid.uuid4())) if test_run else input_id
     record = {
-        "run_id": hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest(),
+        "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
         "input": value, "output": None, "status": "error", "error": None,
     }
@@ -324,13 +331,13 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20):
     try:
         completed = subprocess.run(
             [str(PYTHON), "-B", str(Path(__file__).resolve()), "--tool", tool_name, "--worker"],
-            input=json.dumps({"input": value, "expected": expected}), text=True, capture_output=True,
+            input=json.dumps({"input": value, "expected": expected, "run_id": run_id}), text=True, capture_output=True,
             cwd=str(ROOT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr
         packet = json.loads(completed.stdout)
         result = packet["output"] if expected is not None else packet
-        validate_output(result)
+        validate_output(result, tool_name, run_id)
         record.update(output=result, status=result["status"], error=result["error"])
         return packet
     except subprocess.TimeoutExpired as exc:
@@ -370,10 +377,11 @@ def run_tests(tool_name, cases_path, log_path, *, timeout=20):
         value = case["input"]
         started = datetime.now(timezone.utc).isoformat()
         begin = time.monotonic()
+        run_id = str(uuid.uuid4())
         actual, execution_error = None, None
         failures = []
         try:
-            packet = invoke(tool_name, value, test_run=True, expected=case["expected"], timeout=timeout)
+            packet = invoke(tool_name, value, test_run=True, expected=case["expected"], timeout=timeout, run_id=run_id)
             actual = packet["output"]
             failures.extend(packet["failed_checks"])
         except (subprocess.SubprocessError, ValueError, OSError) as exc:
@@ -382,7 +390,7 @@ def run_tests(tool_name, cases_path, log_path, *, timeout=20):
                 execution_error += " " + (exc.stderr or "")[-4000:]
             failures.append("Runner execution failed")
         record = {
-            "run_id": str(uuid.uuid4()), "case_id": case["case_id"],
+            "run_id": run_id, "case_id": case["case_id"],
             "input_hash": hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest(),
             "implementation_sha256": hashlib.sha256((directory / "tool.py").read_bytes()).hexdigest(),
             "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -430,7 +438,7 @@ def main():
     resolve_tool(args.tool)
     if args.worker:
         payload = json.load(sys.stdin)
-        worker(args.tool, payload["input"], payload["expected"])
+        worker(args.tool, payload["input"], payload["expected"], payload["run_id"])
     elif args.cases:
         run_tests(args.tool, args.cases.resolve(),
                   (args.log or directory / "test-report.log").resolve(), timeout=args.timeout)

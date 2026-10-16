@@ -290,7 +290,7 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
 
     raw_input is a required string supplied by the caller; it is never interpreted.
     URL constraints and the 15-second network budget match _crawl_open_graph.
-    Success atomically replaces tool-local outputs/output.txt with UTF-8 JSON text.
+    Success atomically replaces tool-local outputs/<run_id>.txt with UTF-8 JSON text.
     Expected fetch/write failures return output=null and a structured error.
     """
     result: CrawlResult = {
@@ -314,8 +314,12 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
 
 
 def _write_output(content: str) -> str:
-    """Atomically replace output.txt using a pinned tool-local directory."""
+    """Atomically replace <run_id>.txt using a pinned tool-local directory."""
     tool_root = Path(__file__).resolve().parent
+    run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
+    if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+        raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
+    filename = f"{run_id}.txt"
     descriptor = None
     temporary = None
     try:
@@ -328,11 +332,11 @@ def _write_output(content: str) -> str:
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
-        os.replace(name, "output.txt", src_dir_fd=descriptor, dst_dir_fd=descriptor)
+        os.replace(name, filename, src_dir_fd=descriptor, dst_dir_fd=descriptor)
         temporary = None
-        return f"{tool_root.name}/outputs/output.txt"
+        return f"{tool_root.name}/outputs/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save output.txt in the tool outputs directory.") from exc
+        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool outputs directory.") from exc
     finally:
         if temporary is not None:
             try:

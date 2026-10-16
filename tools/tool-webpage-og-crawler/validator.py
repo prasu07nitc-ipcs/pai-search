@@ -1,6 +1,8 @@
 """Crawler-specific assertions, loaded only by the sandboxed runner during tests."""
 from __future__ import annotations
 
+import os
+
 
 def _check_payload(value: dict, actual: dict, expected: dict) -> list[str]:
     failures = []
@@ -58,7 +60,7 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
         if actual.get("error") is not None or not isinstance(final, str):
             failures.append("Success requires null error and a final URL")
         path = actual.get("output")
-        if not isinstance(path, str) or re.fullmatch(r"tool-webpage-og-crawler/outputs/output\.txt", path) is None:
+        if path != f"tool-webpage-og-crawler/outputs/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
             return failures + ["Invalid JSON result path"]
         tool_root = Path(__file__).resolve().parent
         target = tool_root / "outputs" / path.rsplit("/", 1)[-1]
