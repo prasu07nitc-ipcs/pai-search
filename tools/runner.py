@@ -30,6 +30,43 @@ PYTHON = ENV / "bin/python"
 LOGGER = logging.getLogger(__name__)
 
 
+class DuplicateInputError(ValueError):
+    """A previous production execution requires explicit rerun confirmation."""
+
+
+@contextlib.contextmanager
+def production_history(directory):
+    """Read history under a shared lock without creating a result log."""
+    try:
+        history = (directory / "run.log").open("r", encoding="utf-8")
+    except FileNotFoundError:
+        yield ()
+        return
+    with history:
+        fcntl.flock(history, fcntl.LOCK_SH)
+        yield history
+
+
+def require_new_input(directory, input_id):
+    """Check successful production history, including records lacking run_id."""
+    with production_history(directory) as history:
+        for line in history:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record.get("status") != "ok":
+                continue
+            previous_id = hashlib.sha256(json.dumps(
+                record["input"], sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")).hexdigest()
+            if previous_id == input_id:
+                raise DuplicateInputError(
+                    f"Input already executed for {directory.name} (run_id {input_id}). "
+                    "Ask the user to confirm a rerun, then pass --rerun."
+                )
+
+
 def log_execution(function):
     """Log each call and its elapsed time without changing its result or errors."""
     @wraps(function)
@@ -308,7 +345,7 @@ def worker(tool_name, value, expected=None, run_id=None):
 
 
 @log_execution
-def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_id=None):
+def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_id=None, rerun=False):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
@@ -316,11 +353,13 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
     if expected is not None and not test_run:
         raise ValueError("Test expectations require test_run=True.")
+    input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+    if not test_run and not rerun:
+        log_execution(require_new_input)(directory, input_id)
     outputs = output_directory(directory)
     if outputs is not None:
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
-    input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
     run_id = (run_id or str(uuid.uuid4())) if test_run else input_id
     record = {
         "run_id": run_id,
@@ -420,6 +459,7 @@ def main():
     mode.add_argument("--cases", type=Path)
     parser.add_argument("--log", type=Path, help="Selected tool test-report.log (tests only)")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
+    parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
     verify_environment()
     directory, _ = resolve_tool(args.tool)
@@ -427,6 +467,8 @@ def main():
         parser.error("--timeout must be greater than zero and at most 300 seconds")
     if args.log and not args.cases:
         parser.error("--log requires --cases")
+    if args.rerun and (args.worker or args.cases or args.input is None):
+        parser.error("--rerun requires production --input")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(process)d] %(name)s: %(message)s",
@@ -443,7 +485,23 @@ def main():
         run_tests(args.tool, args.cases.resolve(),
                   (args.log or directory / "test-report.log").resolve(), timeout=args.timeout)
     elif args.input is not None:
-        print(json.dumps(invoke(args.tool, json.loads(args.input), timeout=args.timeout), ensure_ascii=False))
+        value = json.loads(args.input)
+        try:
+            result = invoke(args.tool, value, timeout=args.timeout, rerun=args.rerun)
+        except DuplicateInputError as exc:
+            print(str(exc), file=sys.stderr)
+            if not sys.stdin.isatty():
+                parser.exit(2)
+            print("Run this input again? [y/N] ", end="", file=sys.stderr, flush=True)
+            try:
+                answer = input().strip().lower()
+            except EOFError:
+                answer = ""
+            if answer not in ("y", "yes"):
+                print("Rerun cancelled; tool was not executed.", file=sys.stderr)
+                parser.exit(0)
+            result = invoke(args.tool, value, timeout=args.timeout, rerun=True)
+        print(json.dumps(result, ensure_ascii=False))
     else:
         parser.error("Supply --input JSON, or --cases PATH")
 

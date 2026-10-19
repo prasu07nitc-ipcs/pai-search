@@ -245,6 +245,23 @@ Run its test cases:
   --cases "$tools_root/tool-webpage-og-crawler/test-cases.json"
 ```
 
+For production inputs, the runner checks the selected tool's `run.log` for a
+previous successful execution of the same supplied input object. Matching uses
+the full input, including `raw_input`, without expanding defaults; object key
+order is ignored. Historical successful records without a run ID are included.
+Failed executions and test records do not trigger confirmation.
+
+An interactive terminal asks `Run this input again? [y/N]`; only `y` or `yes`
+proceeds. Non-interactive callers stop with exit code 2 and must ask the user
+before retrying with `--rerun`. API callers likewise receive `DuplicateInputError`
+and can pass `rerun=True` after confirmation. Declining does not execute a worker
+or append a production result record. Confirmed runs retain the normal output
+replacement and append-only logging behavior. Tests do not prompt.
+
+This check uses completed history; simultaneous first executions can both proceed
+before either has recorded success. Unreadable or malformed history stops the
+check rather than silently allowing execution.
+
 Use `--timeout 30`, for example, to change the worker timeout. `--log` is available
 only with `--cases`, and must resolve to the selected tool's `test-report.log`.
 The internal `--worker` mode is for runner orchestration.
