@@ -303,8 +303,8 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
     if payload["status"] == "error":
         result["error"] = payload["error"]
         return result
-    content = {key: payload[key] for key in
-               ("open_graph", "keywords", "datePublished", "dateModified")}
+    content = {key.removeprefix("og:"): item for key, item in payload["open_graph"].items()}
+    content.update({key: payload[key] for key in ("keywords", "datePublished", "dateModified")})
     try:
         path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
         result.update(status="ok", output=path)

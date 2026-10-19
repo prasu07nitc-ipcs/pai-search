@@ -56,8 +56,16 @@ def require_new_input(directory, input_id):
             record = json.loads(line)
             if record.get("status") != "ok":
                 continue
+            if "tool_input" in record:
+                supplied = dict(record["processed_input"])
+                supplied.setdefault("raw_input", record["raw_input"])
+            elif "supplied_input" in record:
+                supplied = record["supplied_input"]
+            else:
+                supplied = record["input"]
             previous_id = hashlib.sha256(json.dumps(
-                record["input"], sort_keys=True, separators=(",", ":"),
+                supplied,
+                sort_keys=True, separators=(",", ":"),
                 ensure_ascii=False, allow_nan=False,
             ).encode("utf-8")).hexdigest()
             if previous_id == input_id:
@@ -364,7 +372,10 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
-        "input": value, "output": None, "status": "error", "error": None,
+        "processed_input": {key: argument for key, argument in value.items() if key != "raw_input"},
+        "raw_input": value["raw_input"], "tool_input": None,
+        "output": None, "output_format": None,
+        "status": "error", "error": None, "meta_data": None,
     }
     worker_stderr = None
     try:
@@ -377,7 +388,13 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
         packet = json.loads(completed.stdout)
         result = packet["output"] if expected is not None else packet
         validate_output(result, tool_name, run_id)
-        record.update(output=result, status=result["status"], error=result["error"])
+        record.update(
+            raw_input=result["input"]["raw_input"],
+            tool_input=result["input"]["processed_input"],
+            output=result["output"], output_format=result["output_format"],
+            status=result["status"], error=result["error"],
+            meta_data=result["meta_data"],
+        )
         return packet
     except subprocess.TimeoutExpired as exc:
         worker_stderr = exc.stderr

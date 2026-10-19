@@ -45,10 +45,10 @@
     "expected": {
       "status": "ok",
       "required_properties": [
-        "og:title",
-        "og:description",
-        "og:image",
-        "og:url"
+        "title",
+        "description",
+        "image",
+        "url"
       ]
     }
   },
@@ -61,11 +61,11 @@
     "expected": {
       "status": "ok",
       "property_values": {
-        "og:title": null,
-        "og:description": null,
-        "og:image": null,
-        "og:url": null,
-        "og:site_name": null
+        "title": null,
+        "description": null,
+        "image": null,
+        "url": null,
+        "site_name": null
       },
       "metadata_values": {
         "keywords": null,
@@ -83,10 +83,10 @@
     "expected": {
       "status": "ok",
       "required_properties": [
-        "og:title",
-        "og:description",
-        "og:image",
-        "og:url"
+        "title",
+        "description",
+        "image",
+        "url"
       ]
     }
   }

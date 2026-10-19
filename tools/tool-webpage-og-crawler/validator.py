@@ -8,7 +8,7 @@ def _check_payload(value: dict, actual: dict, expected: dict) -> list[str]:
     failures = []
     if "error_code" in expected and (actual.get("error") or {}).get("code") != expected["error_code"]:
         failures.append("Unexpected error code")
-    if set(actual) != {"requested_url", "final_url", "status", "open_graph", "keywords", "datePublished", "dateModified", "error"}:
+    if set(actual) != {"requested_url", "final_url", "status", "title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified", "error"}:
         failures.append("Incorrect top-level fields")
     for key in ("keywords", "datePublished", "dateModified"):
         if actual.get(key) is not None and not isinstance(actual[key], str):
@@ -19,8 +19,8 @@ def _check_payload(value: dict, actual: dict, expected: dict) -> list[str]:
     for key in expected.get("required_metadata", []):
         if not actual.get(key):
             failures.append(f"Missing non-empty {key}")
-    graph = actual.get("open_graph", {})
-    keys = {"og:title", "og:description", "og:image", "og:url", "og:site_name"}
+    keys = {"title", "description", "image", "url", "site_name"}
+    graph = {key: actual.get(key) for key in keys}
     if not isinstance(graph, dict) or set(graph) != keys or any(item is not None and not isinstance(item, str) for item in graph.values()):
         failures.append("Incorrect Open Graph schema")
         graph = {}
@@ -70,12 +70,12 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             payload = json.loads(target.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             return failures + [f"Cannot read JSON result: {exc}"]
-        if not isinstance(payload, dict) or set(payload) != {"open_graph", "keywords", "datePublished", "dateModified"}:
+        if not isinstance(payload, dict) or set(payload) != {"title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified"}:
             return failures + ["Incorrect saved JSON fields"]
     elif actual.get("status") == "error":
         if actual.get("output") is not None:
             failures.append("Error must have null output")
-        payload = {"open_graph": dict.fromkeys(("og:title", "og:description", "og:image", "og:url", "og:site_name")), "keywords": None, "datePublished": None, "dateModified": None}
+        payload = dict.fromkeys(("title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified"))
     else:
         return failures + ["Invalid status"]
     if actual.get("output_format") != "json":

@@ -34,9 +34,10 @@ termination may leave temporary files. Concurrent successes with the same ID use
 Existing historical output files are not deleted.
 
 `input.processed_input` contains exactly `url`. The saved JSON payload contains
-exactly `open_graph`, `keywords`, `datePublished`, and `dateModified`.
-`open_graph` always contains exactly `og:title`, `og:description`, `og:image`,
-`og:url`, and `og:site_name`, each a string or null.
+exactly `title`, `description`, `image`, `url`, `site_name`, `keywords`,
+`datePublished`, and `dateModified`, each a string or null. The five Open Graph
+properties are flattened to the root with their `og:` prefix removed; there is
+no `open_graph` wrapper. Existing saved files are not migrated.
 
 HTML entities are decoded and surrounding whitespace trimmed. The first non-empty
 value wins in document order. `property` is preferred over a `name` fallback on
@@ -103,6 +104,8 @@ It checks the envelope, preserved input, run-ID output path and output_format, s
 and types, and successful final URLs,
 and these expectation fields: `status` (checked by the shared runner), `error_code`,
 `required_properties`, `property_values`, `required_metadata`, and `metadata_values`.
+`required_properties` and `property_values` use the saved root field names
+`title`, `description`, `image`, `url`, and `site_name` without an `og:` prefix.
 The validator reads only its own saved JSON payload on success; it performs no
 network requests or writes and does not mutate inputs. Existing content expectations
 apply to the saved payload.
