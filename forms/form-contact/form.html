@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Contact details</title>
+  <link rel="stylesheet" href="/runtime/runtime.css">
+  <link rel="stylesheet" href="/assets/form-contact/form.css">
+  <script type="module" src="/assets/form-contact/form.js"></script>
+</head>
+<body>
+  <main>
+    <header><span class="eyebrow">PAI / FORMS</span><a data-new href="/new/form-contact">New session ↗</a></header>
+    <h1>A little about you.</h1>
+    <p class="intro">Add your contact details below. Use Save draft to save locally, or Submit details when ready.</p>
+    <form novalidate>
+      <fieldset data-fields disabled>
+        <label for="name">Full name <span>Required</span></label>
+        <input id="name" name="name" autocomplete="name" placeholder="Your full name" required maxlength="200">
+        <label for="email_id">Email address <span>Required</span></label>
+        <input id="email_id" name="email_id" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="320">
+        <label for="phone_number">Phone number <span>Required</span></label>
+        <input id="phone_number" name="phone_number" type="tel" autocomplete="tel" placeholder="+91 98765 43210" required maxlength="40">
+        <label for="upi_id">UPI ID <span>Optional</span></label>
+        <input id="upi_id" name="upi_id" autocomplete="off" placeholder="yourname@bank" maxlength="200">
+        <p class="hint">We collect your UPI ID as text. No payment is initiated.</p>
+        <button type="button" data-action="save_draft">Save draft</button>
+        <button type="submit" data-action="submit">Submit details <span aria-hidden="true">→</span></button>
+      </fieldset>
+    </form>
+    <p data-status role="status" aria-live="polite">Opening your session…</p>
+    <button data-retry type="button" hidden>Retry save</button>
+    <footer>SESSION <code data-session>…</code></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,4 @@
+[hidden] { display: none !important; }
+[data-status] { min-height: 1.5em; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset:disabled { opacity: .65; }
