@@ -1,0 +1,30 @@
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #203c35; background: #f2f5f0; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 48px 20px; }
+main { max-width: 780px; margin: auto; padding: 40px; background: #fffefa; border: 1px solid #dae2d9; border-radius: 18px; box-shadow: 0 16px 60px #203c3508; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+a { color: #486c5e; font-size: 12px; text-underline-offset: 4px; }
+h1 { font-size: clamp(29px, 6vw, 38px); letter-spacing: -.04em; margin: 38px 0 12px; }
+.intro { color: #64746c; line-height: 1.6; margin-bottom: 30px; }
+label { display: block; font-size: 14px; font-weight: 600; margin: 20px 0 8px; }
+input { width: 100%; border: 1px solid #cfd8cc; border-radius: 8px; padding: 13px 14px; background: white; font: inherit; color: inherit; }
+input:focus, .editor-shell:focus-within { outline: 3px solid #dceadd; border-color: #557b63; }
+.editor-shell { border: 1px solid #cfd8cc; border-radius: 8px; overflow: hidden; background: white; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px; background: #f5f7f2; border-bottom: 1px solid #dce3d7; }
+button { border: none; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600; }
+.toolbar button { min-width: 36px; padding: 8px 10px; background: transparent; color: #254e3d; font-size: 13px; }
+.toolbar button:hover { background: #e1e9df; }
+#body { min-height: 260px; max-height: 65vh; overflow: auto; padding: 16px; line-height: 1.65; overflow-wrap: anywhere; outline: none; }
+#body p { margin: 0 0 1em; }
+.hint { color: #758075; font-size: 12px; line-height: 1.5; }
+.actions { display: flex; gap: 12px; margin-top: 24px; }
+.actions button, [data-retry] { padding: 14px 20px; background: #254e3d; color: white; }
+.actions button:first-child { background: #e8eee4; color: #254e3d; }
+.actions button:last-child { margin-left: auto; }
+button:focus-visible, a:focus-visible { outline: 3px solid #91b49b; outline-offset: 3px; }
+button:disabled { cursor: default; }
+[data-status] { color: #4b6657; font-size: 13px; line-height: 1.5; }
+footer { border-top: 1px solid #e5e9df; margin-top: 26px; padding-top: 18px; font-size: 10px; color: #7c887d; letter-spacing: .08em; overflow-wrap: anywhere; }
+code { letter-spacing: 0; }
+@media (max-width: 480px) { body { padding: 16px 10px; } main { padding: 26px 22px; } .actions { flex-wrap: wrap; } .actions button { flex: 1; white-space: nowrap; } }

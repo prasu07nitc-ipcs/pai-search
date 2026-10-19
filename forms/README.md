@@ -9,27 +9,28 @@ Requires Python 3.10+ and a modern browser with JavaScript modules.
 From the parent repository (pai-search/):
 
 ```sh
-python3 -B forms/runner.py --form form-contact
+python3 -B forms/runner.py --form "form-<name>"
 ```
 
-Open the printed localhost URL. Keep the process running. Another invocation on
+Replace `form-<name>` with a form directory listed below. Open the printed localhost URL. Keep the process running. Another invocation on
 the same port reuses the server and prints a new-form URL, then exits. Use
 `--port 8766` for a separate server. Ctrl-C stops the serving process. Reopening
 the saved `/session/<form>/<execution_id>` URL after restart restores saved data.
 The runner does not launch a browser automatically or embed itself in chat.
 
-## Contact example
+## Available forms
 
-Name, email ID, and phone number are required at submission. UPI ID is optional.
-All values are strings; formatting and incomplete input are preserved. Validation
-checks basic syntax only, not ownership, deliverability, or payment eligibility.
-No email, SMS, payment, or other external request is made.
+Form-specific usage, fields, validation, and behavior are documented in each
+form's instructions:
+
+- [Contact form](form-contact/AGENTS.md)
+- [Email form](form-email/AGENTS.md)
 
 Initial values can be passed as a URI-encoded JSON object in the new-form URL
-fragment, for example `/new/form-contact#%7B%22name%22%3A%22Jane%22%7D`.
-The browser merges these values over the form defaults before creating revision 0.
-Bookmark the resulting session URL to resume it. Every new-form visit creates a
-new execution; Submit freezes that execution. Use New session for another response.
+fragment (`/new/form-<name>#<encoded-json>`). The browser merges these values over
+the form defaults before creating revision 0. Bookmark the resulting session URL
+to resume it. Every new-form visit creates a new execution; accepted submission
+freezes that execution. Use the form's new-session link for another response.
 
 ## Add a form
 
@@ -39,13 +40,17 @@ Create form-<name>/ with exactly these three code files:
   `data-fields`, status element with `data-status`, retry button with `data-retry`
   (initially hidden), session label with `data-session`, and link with `data-new`.
   Load `/runtime/runtime.css`, `/assets/<name>/form.css`, and the module
-  `/assets/<name>/form.js` using absolute URL paths. Use the contact form as a shell.
+  `/assets/<name>/form.js` using absolute URL paths.
 - form.js: import `mount` and optionally `action` from `/runtime/runtime.js`.
   Call `mount({defaults, render(data), collect(), validate(data)})`. Defaults and
   collected data must be JSON objects. collect() must return a complete, lossless
   snapshot; render() must restore it. validate() returns an array of error strings.
   Keep all form-specific behavior here. Custom buttons must use type="button".
 - form.css: local layout and appearance. No external assets are required.
+
+Document each form's usage, fields, validation, actions, output format, and side
+effects in its own AGENTS.md, and add a link under Available forms above. Keep
+this README focused on the shared framework.
 
 Field edits remain in the browser until an explicit button action saves a complete
 snapshot. There is no background autosave. Draft saving is optional: add
@@ -61,7 +66,7 @@ use lowercase letters, digits, and underscores and start with a letter (64 max).
 
 No runner registration or Python changes are needed to add forms. Form defaults
 and submission validation execute in the browser. The generic server validates
-JSON transport and session rules, not domain-specific contact constraints; this is
+JSON transport and session rules, not form-specific field constraints; this is
 a trusted local UI, not an authenticated public data-validation API.
 
 ## Persistence contract
@@ -84,7 +89,7 @@ with exactly these top-level fields:
     "revision": 1,
     "execution_state": "in_progress",
     "initial_data": {},
-    "current_data": {"name": "Jane"},
+    "current_data": {},
     "action_log": [{
       "sequence": 1,
       "action_id": "unique retry identifier",
@@ -92,7 +97,7 @@ with exactly these top-level fields:
       "outcome": "accepted",
       "action_time": "UTC timestamp",
       "execution_state": "in_progress",
-      "data_after": {"name": "Jane"}
+      "data_after": {}
     }]
   }
 }
