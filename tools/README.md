@@ -271,8 +271,8 @@ The internal `--worker` mode is for runner orchestration.
 A test-case file is an array of objects containing `case_id`, `input`, and
 `expected`. The shared runner checks an expected `status`; the selected validator
 checks tool-specific expectations. Test records appear on stdout and in
-`logs/test-report.log`. **Inspect each record's `passed` field:** the harness does not
-currently return a failing exit status merely because an assertion failed.
+`logs/test-report.log`. **Inspect each record's `passed` field.** The CLI exits 1 if any assertion or
+execution fails, and 0 only when every case passes.
 
 Run infrastructure regression tests through the project interpreter:
 
@@ -317,3 +317,14 @@ in balanced, precision, recall, or compare mode. Its <run_id>.txt contains Markd
 Output folders use `output/`; all logs live in each tool’s `logs/` folder.
 Existing artifacts were relocated without rewriting historical log records; older
 records may still reference the former `outputs/` paths.
+
+Transport JSON and result log records use compact separators. Nested type checks
+retain strict validation while recording one aggregate timing per operation.
+The `run_tests` API returns a boolean indicating whether every case passed.
+
+For agent or CI invocations, add `--summary` to `--cases` to emit one compact object
+with tool, status, total/passed/failed counts, failed case IDs, and the relative
+report path. Complete per-case records still append to `logs/test-report.log`.
+It does not change validation, persistence, or the failing exit code. Without this
+flag, stdout retains the complete per-case records. Production output stays the
+six-field result envelope.

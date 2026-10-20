@@ -19,12 +19,14 @@ let validationTimer;
 const validationFields = new Map();
 function clearValidation() {
   clearTimeout(validationTimer);
+  const hadErrors = [...validationFields.values()].some(item => !item.message.hidden);
   for (const {field, frame, message} of validationFields.values()) {
     field.removeAttribute('aria-invalid');
     frame.classList.remove('field-invalid');
     message.textContent = '';
     message.hidden = true;
   }
+  if (hadErrors) setStatus(dirty ? 'Unsaved changes · use a form button to save' : 'Ready · use a form button to save changes');
 }
 function prepareValidation() {
   for (const field of document.querySelectorAll('[data-fields] input, [data-fields] textarea, [data-fields] [role="textbox"]')) {
@@ -79,7 +81,7 @@ function sessionPath() {
 
 async function save(request) {
   setStatus('Saving…');
-  envelope = await api(`${sessionPath()}/actions`, request);
+  envelope = await api(`${sessionPath()}/actions?view=current`, request);
   pending = null;
   const submitted = envelope.meta_data.execution_state === 'submitted';
   if (submitted) setFieldsDisabled(true);
@@ -145,10 +147,10 @@ export async function mount(formDefinition) {
       if (!supplied || typeof supplied !== 'object' || Array.isArray(supplied)) throw new Error('Initial data must be an object');
       const initial = {...clone(definition.defaults), ...supplied};
       definition.render(initial);
-      envelope = await api('/api/sessions', {form: parts[1], raw_input: '', initial_data: definition.collect()});
+      envelope = await api('/api/sessions?view=current', {form: parts[1], raw_input: '', initial_data: definition.collect()});
       history.replaceState(null, '', `/session/${parts[1]}/${envelope.meta_data.execution_id}`);
     } else {
-      envelope = await api(`/api/sessions/${parts[1]}/${parts[2]}`);
+      envelope = await api(`/api/sessions/${parts[1]}/${parts[2]}?view=current`);
       definition.render(clone(envelope.meta_data.current_data));
     }
     document.querySelector('[data-session]').textContent = envelope.meta_data.execution_id;

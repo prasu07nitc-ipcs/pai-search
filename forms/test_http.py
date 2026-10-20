@@ -60,6 +60,28 @@ class HttpTests(unittest.TestCase):
         saved = json.loads((Path(self.temp.name) / 'form-test' / 'output' / f'{execution_id}.txt').read_text())
         self.assertEqual(saved['meta_data']['current_data'], {'name': 'Jane'})
 
+    def test_current_view_preserves_full_saved_history_and_default_api(self):
+        status, body = self.request('/api/sessions?view=current',
+                                    {'form': 'form-test', 'initial_data': {'name': ''}})
+        self.assertEqual(status, 201)
+        current = json.loads(body)
+        path = '/api/sessions/form-test/' + current['meta_data']['execution_id']
+        for revision in range(3):
+            status, body = self.request(path + '/actions?view=current',
+                {'action_id': f'current-{revision}', 'expected_revision': revision,
+                 'action_name': 'save_draft', 'data': {'name': 'Jane', 'note': 'x' * 1000}})
+            self.assertEqual(status, 200)
+        current = json.loads(body)
+        full = json.loads(self.request(path)[1])
+        self.assertNotIn('action_log', current['meta_data'])
+        self.assertEqual(current['meta_data']['current_data'], full['meta_data']['current_data'])
+        self.assertEqual(current['meta_data']['revision'], 3)
+        self.assertEqual(len(full['meta_data']['action_log']), 3)
+        saved = Path(self.temp.name) / full['output']
+        self.assertEqual(json.loads(saved.read_text()), full)
+        self.assertLess(len(body), len(json.dumps(full).encode()))
+        self.assertEqual(self.request(path + '?view=unknown')[0], 400)
+
     def test_origin_host_and_token(self):
         payload = {'form': 'form-test', 'initial_data': {}}
         for headers in ({'Origin': 'https://example.com'}, {'Host': 'evil.example'}, {'X-Forms-Token': 'bad'}):

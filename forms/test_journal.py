@@ -73,6 +73,19 @@ class JournalTests(unittest.TestCase):
             self.action(99, {'name': 'Stale'})
         self.assertEqual(len(self.records()), 1)
 
+    def test_unchanged_reads_skip_journal_work_and_external_changes_recover(self):
+        import store
+        path = self.root / 'form-test' / 'logs' / 'run.log'
+        with patch('store.append_records', wraps=store.append_records) as append:
+            self.store.read('form-test', self.id)
+            append.assert_not_called()
+            self.action(0, {'name': 'Jane'})
+            self.assertEqual(append.call_count, 1)
+        # A removed journal must be reconstructed, despite the in-memory checkpoint.
+        path.unlink()
+        self.store.read('form-test', self.id)
+        self.assertEqual([r['meta_data']['revision'] for r in self.records()], [0, 1])
+
     def test_corrupt_complete_line_and_symlink_fail_closed(self):
         path = self.root / 'form-test' / 'logs' / 'run.log'
         path.write_text('not-json\n')

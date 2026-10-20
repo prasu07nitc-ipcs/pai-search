@@ -230,3 +230,20 @@ run.log contains personal data and full cumulative history, increasing disk usag
 It is gitignored, is not served as a static resource, and has no retention limit.
 Tests write only to temporary form directories, never production run.log. Existing
 tools logging is unchanged.
+
+## Current-state transport and warm reads
+
+The browser requests `?view=current` on session creation, reads, and actions.
+This response retains the six top-level envelope keys but sets
+`input.processed_input` to `{}` and includes only `execution_id`, `form`,
+`created_at`, `revision`, `execution_state`, and `current_data` in `meta_data`.
+It is a transport projection, not the persisted session envelope. Omit the query
+(or use `?view=full`) to retrieve initial input and complete action history.
+Historical snapshots and saved files remain complete; unknown views return 400.
+
+An in-memory per-form journal checkpoint avoids recovery writes and full historical
+snapshot reconstruction on unchanged reads. Changes to the journal's identity,
+size, or timestamps invalidate checkpoints; restart rebuilds from disk. Checkpoints
+store IDs and revisions only and are bounded to 1,024 session IDs per form. The
+single-server-per-storage-root restriction still applies. Required commits and
+journal appends retain their flush/fsync guarantees.

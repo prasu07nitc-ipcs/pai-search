@@ -30,7 +30,7 @@ Default settings:
 
 ## Component integration and data contracts
 
-Use these local capabilities by reading their detailed instructions before the run:
+Read these component instructions once per run; reuse their contracts for subsequent iterations:
 
 - [Encoding](../skill-context-encoder/AGENTS.md)
 - [Decoding](../skill-context-decoder/AGENTS.md)
@@ -88,3 +88,16 @@ For a completed or interrupted loop, return only a valid JSON object with exactl
 Use the comparison's returned inventory and differences in `validation`, keeping the information available for inspection. Do not round scores before acceptance or imply that 0.8 means 80% accuracy. Semantic classifications may vary; acceptance reports compliance with this run's metric, not guaranteed lossless recovery.
 
 Confirmation questions and invalid-input explanations are exceptions to the final JSON format. Do not fabricate final artifacts or mark a run completed while confirmation is pending.
+
+## Execution efficiency
+
+Keep the original, frozen reference inventory, and effective weights in memory for
+one run. Do not reload unchanged instructions or regenerate the reference inventory
+between iterations. Repair only demonstrated discrepancies; reuse an unchanged
+entity array when only decoding needs correction. Reuse a reconstruction or full
+comparison only when its exact inputs, inventory, and weights are unchanged within
+this run; never infer a score for changed text. A reused complete cycle still counts
+against the iteration budget and must be recorded honestly. Stop immediately on
+acceptance; do not perform extra polishing cycles. Keep intermediate artifacts
+internal and emit the specified final JSON once, compactly, without commentary.
+Do not remove required output fields or original details to reduce tokens.

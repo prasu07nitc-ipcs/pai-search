@@ -5,4 +5,5 @@ description: Compare two text blobs and return structured JSON with readable inf
 
 # Context validator
 
-Read [AGENTS.md](AGENTS.md) and follow its input validation, information comparison, scoring, and output rules. Return the structured comparison result defined there.
+Read [AGENTS.md](AGENTS.md) for the input, processing, and output contract.
+Load it once per run; emit only its specified result.

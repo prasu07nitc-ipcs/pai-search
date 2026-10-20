@@ -138,4 +138,4 @@ absolute interpreter and worker paths at runtime and sets the worker directory
 explicitly to `tools/`.
 
 The harness reports each case's outcome in its log and stdout; callers should
-inspect `passed` rather than treating harness exit status as the test verdict.
+inspect `passed` for each case; the CLI exits 1 if any case fails.

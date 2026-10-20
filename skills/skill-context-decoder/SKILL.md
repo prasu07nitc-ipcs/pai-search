@@ -5,4 +5,5 @@ description: Reconstruct coherent plain text from a JSON array of entity utteran
 
 # Context decoder
 
-Read [AGENTS.md](AGENTS.md) and follow its input validation, reconstruction, and output rules. Accept the five-field input schema defined there, including the exact `entity_utternace` spelling, and return only the reconstructed text for valid input.
+Read [AGENTS.md](AGENTS.md) for the input, processing, and output contract.
+Load it once per run; emit only its specified result.

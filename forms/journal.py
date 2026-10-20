@@ -43,14 +43,13 @@ def append_records(path, records):
         os.close(directory_fd)
 
 
-def session_records(value):
+def session_records(value, start_revision=0):
     """Reconstruct committed envelopes, including revision zero, from saved snapshots."""
     meta = value["meta_data"]
-    for revision in range(meta["revision"] + 1):
-        envelope = copy.deepcopy(value)
-        state = envelope["meta_data"]
-        state["revision"] = revision
-        state["action_log"] = state["action_log"][:revision]
+    for revision in range(start_revision, meta["revision"] + 1):
+        envelope = copy.deepcopy({key: item for key, item in value.items() if key != "meta_data"})
+        state = copy.deepcopy({**meta, "revision": revision, "action_log": meta["action_log"][:revision]})
+        envelope["meta_data"] = state
         entry = state["action_log"][-1] if revision else None
         state["current_data"] = copy.deepcopy(entry["data_after"] if entry else state["initial_data"])
         state["execution_state"] = entry["execution_state"] if entry else "in_progress"

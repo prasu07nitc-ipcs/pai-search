@@ -145,8 +145,7 @@ tools_root="$(pwd -P)/tools"
   --cases "$tools_root/tool-webpage-markdown/test-cases.json"
 ```
 
-Inspect every test record's passed field; assertion failures do not necessarily
-cause a failing harness exit status. Runtime testing must use this environment and
+Inspect every test record's passed field; the CLI exits 1 if any case fails. Runtime testing must use this environment and
 runner.
 
 The parent runner writes production results to [run.log](logs/run.log), test results

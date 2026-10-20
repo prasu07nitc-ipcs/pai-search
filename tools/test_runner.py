@@ -222,13 +222,61 @@ class RunnerTests(unittest.TestCase):
                     self.assertEqual(stopped.exception.code, exit_code)
                 self.assertEqual(invoke.call_count, calls)
 
+    def test_cli_returns_failure_for_failed_test_assertions(self):
+        for passed, expected in ((True, None), (False, 1)):
+            with self.subTest(passed=passed), \
+                 patch.object(runner.sys, 'argv', ['runner.py', '--tool', 'tool-example', '--cases', 'cases.json']), \
+                 patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
+                 patch.object(runner.logging, 'basicConfig'), \
+                 patch.object(runner.logging, 'FileHandler', return_value=logging.NullHandler()), \
+                 patch.object(runner, 'run_tests', return_value=passed):
+                if expected is None:
+                    runner.main()
+                else:
+                    with self.assertRaises(SystemExit) as stopped:
+                        runner.main()
+                    self.assertEqual(stopped.exception.code, expected)
+
+    def test_nested_type_validation_logs_one_operation(self):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        runner.LOGGER.addHandler(handler)
+        try:
+            self.assertTrue(runner.matches_type([{'items': list(range(100))}], list[dict[str, list[int]]]))
+        finally:
+            runner.LOGGER.removeHandler(handler)
+        self.assertEqual(stream.getvalue().count('Function matches_type started'), 1)
+        self.assertFalse(runner.matches_type([{'items': [True]}], list[dict[str, list[int]]]))
+
+    def test_summary_keeps_complete_reports_and_reports_failed_cases(self):
+        packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}},
+                  'output': 'tool-example/output/' + 'a' * 64 + '.txt', 'status': 'ok',
+                  'error': None, 'output_format': 'json', 'meta_data': {}},
+                  'failed_checks': ['Deliberate failure']}
+        cases = self.directory / 'cases.json'
+        cases.write_text(json.dumps([{'case_id': 'failure', 'input': {'count': 1},
+                                      'expected': {'status': 'ok'}}]))
+        stream = io.StringIO()
+        with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
+             patch.object(runner, 'invoke', return_value=packet), contextlib.redirect_stdout(stream):
+            self.assertFalse(runner.run_tests('tool-example', cases,
+                self.directory / 'logs' / 'test-report.log', summary=True))
+        summary = json.loads(stream.getvalue())
+        self.assertEqual(summary['failed_case_ids'], ['failure'])
+        self.assertEqual(summary['status'], 'error')
+        self.assertEqual(summary['total_cases'], 1)
+        full = json.loads((self.directory / 'logs' / 'test-report.log').read_text())
+        self.assertEqual(full['failed_checks'], ['Deliberate failure'])
+        self.assertEqual(full['actual'], packet['output'])
+        self.assertNotIn('actual', summary)
+
     def test_no_tool_specific_assertions_in_harness(self):
         packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}, 'failed_checks': []}
         cases = self.directory / 'cases.json'
         cases.write_text(json.dumps([{'case_id': 'generic', 'input': {'count': 1}, 'expected': {'status': 'ok'}}]))
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
              patch.object(runner, 'invoke', return_value=packet), contextlib.redirect_stdout(io.StringIO()):
-            runner.run_tests('tool-example', cases, self.directory / 'logs' / 'test-report.log')
+            self.assertTrue(runner.run_tests('tool-example', cases, self.directory / 'logs' / 'test-report.log'))
         self.assertTrue(json.loads((self.directory / 'logs' / 'test-report.log').read_text())['passed'])
         self.assertFalse((self.directory / 'logs' / 'run.log').exists())
 

@@ -5,4 +5,5 @@ description: Encode a text blob into entity utterances, reconstruct it, and iter
 
 # Context
 
-Read [AGENTS.md](AGENTS.md) and follow its input, configuration-confirmation, refinement, and output contracts. Coordinate the local encoding, decoding, and comparison capabilities using their documented interfaces.
+Read [AGENTS.md](AGENTS.md) for the input, processing, and output contract.
+Load it once per run; emit only its specified result.

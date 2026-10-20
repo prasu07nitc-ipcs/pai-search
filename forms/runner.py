@@ -13,6 +13,14 @@ ROOT = Path(__file__).resolve().parent
 MAX_BODY = 2 * 1024 * 1024
 
 
+def current_view(value):
+    """Small UI transport view; persisted files and the default API stay complete."""
+    meta = value["meta_data"]
+    return {**value, "input": {"raw_input": value["input"]["raw_input"], "processed_input": {}},
+            "meta_data": {key: meta[key] for key in
+                          ("execution_id", "form", "created_at", "revision", "execution_state", "current_data")}}
+
+
 def make_server(root=ROOT, port=8765):
     store = Store(root)
     token = secrets.token_urlsafe(32)
@@ -22,7 +30,7 @@ def make_server(root=ROOT, port=8765):
             pass  # Do not log contact data or capability tokens.
 
         def reply(self, value, status=200, content_type="application/json; charset=utf-8"):
-            body = json.dumps(value, allow_nan=False).encode() if isinstance(value, (dict, list)) else value
+            body = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode() if isinstance(value, (dict, list)) else value
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
@@ -44,6 +52,11 @@ def make_server(root=ROOT, port=8765):
             if parts[0] == "api":
                 if self.headers.get("X-Forms-Token") != token:
                     return self.reply({"error": "Invalid session token"}, 403)
+                view = parse_qs(parsed.query).get("view", ["full"])[0]
+                if view not in ("full", "current"):
+                    raise ValueError("Unknown session view")
+                def session_reply(value, status=200):
+                    return self.reply(current_view(value) if view == "current" else value, status)
                 if method == "POST":
                     if self.headers.get("Origin") != f"http://{host}":
                         return self.reply({"error": "Invalid origin"}, 403)
@@ -58,13 +71,13 @@ def make_server(root=ROOT, port=8765):
                     if not isinstance(body, dict):
                         raise ValueError("Request must be an object")
                 if method == "POST" and parts == ["api", "sessions"]:
-                    return self.reply(store.create(body.get("form"), body.get("raw_input", ""), body.get("initial_data", {})), 201)
+                    return session_reply(store.create(body.get("form"), body.get("raw_input", ""), body.get("initial_data", {})), 201)
                 if len(parts) in (4, 5) and parts[1] == "sessions":
                     name, execution_id = parts[2:4]
                     if method == "GET" and len(parts) == 4:
-                        return self.reply(store.read(name, execution_id))
+                        return session_reply(store.read(name, execution_id))
                     if method == "POST" and parts[4:] == ["actions"]:
-                        return self.reply(store.action(name, execution_id, body))
+                        return session_reply(store.action(name, execution_id, body))
                     if method == "GET" and parts[4:] == ["snapshot"]:
                         revision = int(parse_qs(parsed.query).get("revision", ["0"])[0])
                         return self.reply(store.snapshot(name, execution_id, revision))

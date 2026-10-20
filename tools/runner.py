@@ -189,6 +189,11 @@ def validate_input(directory, entry, value):
 
 @log_execution
 def matches_type(value, annotation):
+    """Time one type-validation operation rather than logging every nested value."""
+    return _matches_type(value, annotation)
+
+
+def _matches_type(value, annotation):
     """Validate supported JSON-compatible Python annotations without coercion."""
     if annotation is typing.Any:
         return True
@@ -196,18 +201,18 @@ def matches_type(value, annotation):
         return value is None
     origin, args = typing.get_origin(annotation), typing.get_args(annotation)
     if origin in (typing.Union, types.UnionType):
-        return any(matches_type(value, item) for item in args)
+        return any(_matches_type(value, item) for item in args)
     if origin is typing.Literal:
         return any(type(value) is type(item) and value == item for item in args)
     if typing.is_typeddict(annotation):
         hints = typing.get_type_hints(annotation)
         return (isinstance(value, dict) and annotation.__required_keys__ <= value.keys()
                 and value.keys() <= hints.keys()
-                and all(matches_type(item, hints[key]) for key, item in value.items()))
+                and all(_matches_type(item, hints[key]) for key, item in value.items()))
     if origin is list:
-        return isinstance(value, list) and all(matches_type(item, args[0]) for item in value)
+        return isinstance(value, list) and all(_matches_type(item, args[0]) for item in value)
     if origin is dict:
-        return isinstance(value, dict) and all(matches_type(key, args[0]) and matches_type(item, args[1]) for key, item in value.items())
+        return isinstance(value, dict) and all(_matches_type(key, args[0]) and _matches_type(item, args[1]) for key, item in value.items())
     if annotation in (str, bool, int, list, dict):
         return type(value) is annotation
     if annotation is float:
@@ -362,7 +367,7 @@ def worker(tool_name, value, expected=None, run_id=None):
             if any(not isinstance(item, str) for item in failures):
                 raise ValueError("Test checks must return a list of failure strings.")
     packet = {"output": result, "failed_checks": failures} if expected is not None else result
-    print(json.dumps(packet, ensure_ascii=False, allow_nan=False))
+    print(json.dumps(packet, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
 @log_execution
@@ -427,13 +432,13 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
         if not test_run:
             with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
                 fcntl.flock(log, fcntl.LOCK_EX)
-                log.write(json.dumps(record, ensure_ascii=False) + "\n")
+                log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
                 log.flush()
                 os.fsync(log.fileno())
 
 
 @log_execution
-def run_tests(tool_name, cases_path, log_path, *, timeout=20):
+def run_tests(tool_name, cases_path, log_path, *, timeout=20, summary=False):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     if log_path.resolve() != (directory / "logs" / "test-report.log").resolve():
@@ -444,6 +449,8 @@ def run_tests(tool_name, cases_path, log_path, *, timeout=20):
         validate_input(directory, entry, case["input"])
         if not isinstance(case["expected"], dict):
             raise ValueError("Test expectations must be JSON objects.")
+    all_passed = True
+    failed_case_ids = []
     for case in cases:
         value = case["input"]
         started = datetime.now(timezone.utc).isoformat()
@@ -476,10 +483,21 @@ def run_tests(tool_name, cases_path, log_path, *, timeout=20):
             if any(json.loads(line)["run_id"] == record["run_id"] for line in log if line.strip()):
                 raise RuntimeError("Duplicate run_id; refusing duplicate log entry")
             log.seek(0, 2)
-            log.write(json.dumps(record, ensure_ascii=False) + "\n")
+            log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
             log.flush()
             os.fsync(log.fileno())
-        print(json.dumps(record, ensure_ascii=False), flush=True)
+        all_passed = all_passed and record["passed"]
+        if not record["passed"]:
+            failed_case_ids.append(record["case_id"])
+        if not summary:
+            print(json.dumps(record, ensure_ascii=False, separators=(",", ":")), flush=True)
+    if summary:
+        print(json.dumps({"tool": tool_name, "status": "ok" if all_passed else "error",
+                          "total_cases": len(cases), "passed_cases": len(cases) - len(failed_case_ids),
+                          "failed_cases": len(failed_case_ids), "failed_case_ids": failed_case_ids,
+                          "report": f"{tool_name}/logs/test-report.log"},
+                         ensure_ascii=False, separators=(",", ":")), flush=True)
+    return all_passed
 
 
 def main():
@@ -489,6 +507,7 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--input", help="JSON object of named tool arguments")
     mode.add_argument("--cases", type=Path)
+    parser.add_argument("--summary", action="store_true", help="Emit one test summary; complete records remain in logs/test-report.log")
     parser.add_argument("--log", type=Path, help="Selected tool test-report.log (tests only)")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
     parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
@@ -497,6 +516,8 @@ def main():
     directory, _ = resolve_tool(args.tool)
     if not math.isfinite(args.timeout) or not 0 < args.timeout <= 300:
         parser.error("--timeout must be greater than zero and at most 300 seconds")
+    if args.summary and (not args.cases or args.worker):
+        parser.error("--summary requires --cases and cannot be used by workers")
     if args.log and not args.cases:
         parser.error("--log requires --cases")
     if args.rerun and (args.worker or args.cases or args.input is None):
@@ -516,8 +537,10 @@ def main():
         payload = json.load(sys.stdin)
         worker(args.tool, payload["input"], payload["expected"], payload["run_id"])
     elif args.cases:
-        run_tests(args.tool, args.cases.resolve(),
-                  (args.log or directory / "logs" / "test-report.log").resolve(), timeout=args.timeout)
+        passed = run_tests(args.tool, args.cases.resolve(),
+                           (args.log or directory / "logs" / "test-report.log").resolve(), timeout=args.timeout, summary=args.summary)
+        if not passed:
+            parser.exit(1)
     elif args.input is not None:
         value = json.loads(args.input)
         try:
@@ -535,7 +558,7 @@ def main():
                 print("Rerun cancelled; tool was not executed.", file=sys.stderr)
                 parser.exit(0)
             result = invoke(args.tool, value, timeout=args.timeout, rerun=True)
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     else:
         parser.error("Supply --input JSON, or --cases PATH")
 

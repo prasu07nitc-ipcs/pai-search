@@ -5,4 +5,5 @@ description: Extract context from a complete text blob into a JSON array of enti
 
 # Context encoder
 
-Read [AGENTS.md](AGENTS.md) and follow its input validation, entity extraction, utterance reconstruction, and output rules. Return the specified five-field JSON array for valid input, including the exact `entity_utternace` spelling, or the prescribed plain-text validation message for invalid input.
+Read [AGENTS.md](AGENTS.md) for the input, processing, and output contract.
+Load it once per run; emit only its specified result.

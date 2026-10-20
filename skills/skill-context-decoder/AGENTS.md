@@ -57,3 +57,11 @@ Use neutral third-person narration by default. First-person pronouns in each utt
 For valid nonempty input, return only the reconstructed plain-text blob in complete sentences and coherent paragraphs. Do not include headings, commentary, JSON, Markdown fences, a list of entities, or a claim that the original text was recovered exactly.
 
 For `[]`, return an empty text output. Do not invent a paragraph or factual content to fill it.
+
+## Execution efficiency
+
+Validate the input once, then perform the defined transformation and a final
+integrity check. Load only this skill's instructions; do not invoke encoding,
+decoding, or iterative comparison stages outside the requested capability.
+Keep intermediate reasoning internal and emit only the required result. Preserve
+all required fields and material information; brevity must not reduce fidelity.

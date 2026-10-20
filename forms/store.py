@@ -46,10 +46,33 @@ class Store:
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.lock = threading.RLock()
+        self._log_checkpoints = {}
 
     def sync_log(self, value):
-        path = self.form(value["meta_data"]["form"]) / "logs" / "run.log"
-        append_records(path, session_records(value))
+        meta = value["meta_data"]
+        path = self.form(meta["form"]) / "logs" / "run.log"
+        # Cache only revision numbers, never personal data. External changes invalidate
+        # every checkpoint for this form so recovery still checks the complete journal.
+        def signature():
+            if path.parent.is_symlink() or path.is_symlink():
+                raise ValueError("Log paths must not be symlinks")
+            try:
+                info = path.stat()
+            except FileNotFoundError:
+                return None
+            return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        current = signature()
+        checkpoint = self._log_checkpoints.get(meta["form"])
+        revisions = checkpoint[1] if checkpoint and checkpoint[0] == current else {}
+        previous = revisions.get(meta["execution_id"], -1)
+        if previous == meta["revision"]:
+            return
+        append_records(path, session_records(value, start_revision=previous + 1))
+        # Bound memory; eviction affects speed only, because the file is authoritative.
+        if len(revisions) >= 1024:
+            revisions = {}
+        revisions[meta["execution_id"]] = meta["revision"]
+        self._log_checkpoints[meta["form"]] = (signature(), revisions)
 
     def recover_logs(self):
         """Backfill existing sessions and repair missing acknowledged log records."""

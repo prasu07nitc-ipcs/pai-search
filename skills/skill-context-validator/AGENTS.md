@@ -127,3 +127,13 @@ Counts are nonnegative integers; weights, totals, and scores are finite JSON num
 When no differences are found, return the same structure with `differences: []`, `total_difference_weight: 0`, `difference_score: 0`, and `critical_difference_count: 0`; still include the inventory and effective weights. Do not emit a fabricated no-difference item.
 
 Validation failures are the exception to JSON output: return the concise plain-text validation message described above. Do not treat that response as a zero score. For valid input, omit Markdown fences and commentary.
+
+## Execution efficiency
+
+Validate the input once, then perform the defined transformation and a final
+integrity check. Load only this skill's instructions; do not invoke encoding,
+decoding, or iterative comparison stages outside the requested capability.
+Keep intermediate reasoning internal and emit only the required result. Preserve
+all required fields and material information; brevity must not reduce fidelity.
+Use compact JSON. Reuse a supplied valid reference inventory unchanged; do not
+regenerate it or compare against previous reconstructions instead of Text 1.
