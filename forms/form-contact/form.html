@@ -10,26 +10,26 @@
 </head>
 <body>
   <main>
-    <header><span class="eyebrow">PAI / FORMS</span><a data-new href="/new/form-contact">New session ↗</a></header>
-    <h1>A little about you.</h1>
-    <p class="intro">Add your contact details below. Use Save draft to save locally, or Submit details when ready.</p>
-    <form novalidate>
+    <header><span class="eyebrow">Contact</span><div class="header-actions"><button type="button" data-info aria-label="about this form" title="about this form" aria-expanded="false" aria-controls="form-info"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button><button type="button" form="entry-form" data-action="save_draft" title="save draft" aria-label="save draft" disabled><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h9"/></svg></button><a data-new href="/new/form-contact" title="create new form" aria-label="create new form"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></a></div></header>
+    <aside id="form-info" data-info-panel aria-label="About this form" hidden><p>Collect contact details and an optional UPI ID. Use the save icon to save an incomplete draft locally, or Submit details to validate and finalize it. This form does not send messages or initiate payments.</p></aside>
+    <p class="session-label"><code data-session>…</code></p>
+    <form id="entry-form" novalidate>
       <fieldset data-fields disabled>
-        <label for="name">Full name <span>Required</span></label>
+        <label for="name">Full name <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="name" name="name" autocomplete="name" placeholder="Your full name" required maxlength="200">
-        <label for="email_id">Email address <span>Required</span></label>
+        <label for="email_id">Email address <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="email_id" name="email_id" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="320">
-        <label for="phone_number">Phone number <span>Required</span></label>
+        <label for="phone_number">Phone number <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="phone_number" name="phone_number" type="tel" autocomplete="tel" placeholder="+91 98765 43210" required maxlength="40">
-        <label for="upi_id">UPI ID <span>Optional</span></label>
+        <label for="upi_id">UPI ID</label>
         <input id="upi_id" name="upi_id" autocomplete="off" placeholder="yourname@bank" maxlength="200">
-        <button type="button" data-action="save_draft">Save draft</button>
-        <button type="submit" data-action="submit">Submit details <span aria-hidden="true">→</span></button>
+        <div class="actions">
+          <button type="submit" data-action="submit">Submit</button>
+        </div>
       </fieldset>
     </form>
     <p data-status role="status" aria-live="polite">Opening your session…</p>
     <button data-retry type="button" hidden>Retry save</button>
-    <footer>SESSION <code data-session>…</code></footer>
   </main>
 </body>
 </html>

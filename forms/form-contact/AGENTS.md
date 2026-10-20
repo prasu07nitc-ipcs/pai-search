@@ -1,4 +1,4 @@
-# Contact form
+# Contact
 
 Follow the shared policies in [../AGENTS.md](../AGENTS.md) and the runtime contract
 in [../README.md](../README.md). Keep contact-specific behavior in this folder.
@@ -28,7 +28,7 @@ Validation checks syntax only, not ownership, deliverability, or payment eligibi
 
 ## Actions and output
 
-Save draft (`save_draft`) saves the complete snapshot without submission validation.
+Header Save button (`save_draft`) saves the complete snapshot without submission validation.
 Submit details (`submit`) validates the fields, records accepted or rejected, and
 freezes the session only when accepted. The saved envelope's
 `meta_data.current_data` contains `name`, `email_id`, `phone_number`, and `upi_id`.

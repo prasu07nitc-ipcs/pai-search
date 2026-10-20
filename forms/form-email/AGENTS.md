@@ -1,4 +1,4 @@
-# Email form
+# Email
 
 Follow the shared policies in [../AGENTS.md](../AGENTS.md) and the runtime contract
 in [../README.md](../README.md). Keep email-specific behavior in this folder.
@@ -34,7 +34,7 @@ submission. No attachments or sender credentials are collected.
 
 ## Actions and output
 
-Save draft (`save_draft`) saves the complete snapshot without submission validation.
+Header Save button (`save_draft`) saves the complete snapshot without submission validation.
 Submit email (`submit`) validates recipients, subject, and body, records accepted
 or rejected, and freezes the session only when accepted.
 

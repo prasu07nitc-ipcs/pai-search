@@ -9,6 +9,10 @@ let active = false;
 let dirty = false;
 const status = () => document.querySelector('[data-status]');
 const setStatus = message => { status().textContent = message; };
+function setFieldsDisabled(disabled) {
+  document.querySelector('[data-fields]').disabled = disabled;
+  for (const button of document.querySelectorAll('button[data-action]')) button.disabled = disabled;
+}
 const clone = value => JSON.parse(JSON.stringify(value));
 
 async function api(path, body) {
@@ -32,19 +36,18 @@ async function save(request) {
   envelope = await api(`${sessionPath()}/actions`, request);
   pending = null;
   const submitted = envelope.meta_data.execution_state === 'submitted';
-  if (submitted) document.querySelector('[data-fields]').disabled = true;
+  if (submitted) setFieldsDisabled(true);
   setStatus(submitted ? 'Submitted and saved.' : `Saved · revision ${envelope.meta_data.revision}`);
 }
 
 export function action(name, data = definition.collect(), outcome = 'accepted') {
   if (!active || failed) return Promise.resolve(false);
-  const buttons = [...document.querySelectorAll('form button[data-action]')];
+  const buttons = [...document.querySelectorAll('button[data-action]')];
   if (buttons.filter(button => button.dataset.action === name).length !== 1) {
     throw new Error('Each action must map to exactly one form button');
   }
   const snapshot = clone(data);
-  const fields = document.querySelector('[data-fields]');
-  fields.disabled = true;
+  setFieldsDisabled(true);
   tail = tail.then(async () => {
     if (failed) return false;
     const request = {action_id: crypto.randomUUID(), expected_revision: envelope.meta_data.revision,
@@ -53,11 +56,11 @@ export function action(name, data = definition.collect(), outcome = 'accepted') 
     try {
       await save(request);
       dirty = false;
-      fields.disabled = envelope.meta_data.execution_state === 'submitted';
+      setFieldsDisabled(envelope.meta_data.execution_state === 'submitted');
       return true;
     } catch (error) {
       failed = true;
-      document.querySelector('[data-fields]').disabled = true;
+      setFieldsDisabled(true);
       document.querySelector('[data-retry]').hidden = false;
       setStatus(`${error.message}. Your last action is pending; retry, or reload to recover saved data.`);
       return false;
@@ -68,6 +71,24 @@ export function action(name, data = definition.collect(), outcome = 'accepted') 
 
 export async function mount(formDefinition) {
   definition = formDefinition;
+  const infoButton = document.querySelector('[data-info]');
+  const infoPanel = document.querySelector('[data-info-panel]');
+  if (infoButton && infoPanel) {
+    const showInfo = open => {
+      infoPanel.hidden = !open;
+      infoButton.setAttribute('aria-expanded', String(open));
+    };
+    infoButton.addEventListener('click', () => showInfo(infoPanel.hidden));
+    document.addEventListener('click', event => {
+      if (!infoButton.contains(event.target) && !infoPanel.contains(event.target)) showInfo(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !infoPanel.hidden) {
+        showInfo(false);
+        infoButton.focus();
+      }
+    });
+  }
   try {
     token = (await (await fetch('/runtime/config.json')).json()).token;
     const parts = location.pathname.split('/').filter(Boolean);
@@ -86,10 +107,10 @@ export async function mount(formDefinition) {
     document.querySelector('[data-session]').textContent = envelope.meta_data.execution_id;
     document.querySelector('[data-new]').href = `/new/${envelope.meta_data.form}`;
     active = true;
-    document.querySelector('[data-fields]').disabled = envelope.meta_data.execution_state === 'submitted';
+    setFieldsDisabled(envelope.meta_data.execution_state === 'submitted');
     setStatus(envelope.meta_data.execution_state === 'submitted' ? 'Submitted and saved.' : 'Ready · use a form button to save changes');
     const form = document.querySelector('form');
-    const buttons = [...form.querySelectorAll('button[data-action]')];
+    const buttons = [...document.querySelectorAll('button[data-action]')].filter(button => button.form === form);
     const names = buttons.map(button => button.dataset.action);
     if (names.some(name => !/^[a-z][a-z0-9_]{0,63}$/.test(name)) || new Set(names).size !== names.length ||
         buttons.some(button => (button.type === 'submit') !== (button.dataset.action === 'submit'))) {
@@ -117,7 +138,7 @@ export async function mount(formDefinition) {
         return;
       }
       // Freeze editing while submission waits behind earlier actions.
-      document.querySelector('[data-fields]').disabled = true;
+      setFieldsDisabled(true);
       await action('submit', data);
     });
     document.querySelector('[data-retry]').addEventListener('click', async () => {
@@ -127,7 +148,7 @@ export async function mount(formDefinition) {
         failed = false;
         dirty = false;
         definition.render(clone(envelope.meta_data.current_data));
-        document.querySelector('[data-fields]').disabled = envelope.meta_data.execution_state === 'submitted';
+        setFieldsDisabled(envelope.meta_data.execution_state === 'submitted');
         document.querySelector('[data-retry]').hidden = true;
       } catch (error) { setStatus(`${error.message}. Retry or reload this session.`); }
     });

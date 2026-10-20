@@ -2,7 +2,9 @@
 
 Manage and execute browser-based forms only within the user's requested scope.
 Each form-<name> directory uses lowercase kebab-case, under 64 characters, and
-contains form.html, form.js, and form.css. Keep form-specific fields, rendering,
+contains form.html, form.js, form.css, and AGENTS.md.
+Each form-specific AGENTS.md must begin on its first line with `# <name>`
+(for example, `# Contact` or `# Email`), using only the form name. Keep form-specific fields, rendering,
 and validation in those files. Shared HTTP, persistence, and action orchestration
 belong in runner.py, store.py, and runtime/. Do not hardcode individual form
 schemas in shared infrastructure. No MCP integration or third-party dependencies.
