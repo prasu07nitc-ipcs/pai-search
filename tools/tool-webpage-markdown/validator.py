@@ -30,9 +30,9 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     if actual.get("status") == "ok":
         check(actual.get("error") is None, "Success requires null error")
         check(isinstance(final, str) and bool(final), "Success requires final_url")
-        if actual.get("output") != f"tool-webpage-markdown/outputs/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
+        if actual.get("output") != f"tool-webpage-markdown/output/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
             return failures + ["Incorrect output path"]
-        target = Path(__file__).resolve().parent / "outputs" / (os.environ["PROJECT_TOOL_RUN_ID"] + ".txt")
+        target = Path(__file__).resolve().parent / "output" / (os.environ["PROJECT_TOOL_RUN_ID"] + ".txt")
         try:
             if target.parent.is_symlink() or target.is_symlink() or not target.is_file() or target.stat().st_nlink != 1:
                 return failures + ["Output must be a regular unaliased file"]

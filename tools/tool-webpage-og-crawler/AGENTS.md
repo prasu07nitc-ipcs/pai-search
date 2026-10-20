@@ -17,7 +17,7 @@ the tool validates supplied arguments. Rejected values are echoed for diagnosis.
 
 `status` is `ok` or `error`; `error` is null on success or contains exactly
 non-empty string `code` and `message` fields on failure. `output` is null on
-failure and `tool-webpage-og-crawler/outputs/<run_id>.txt` on success, relative to
+failure and `tool-webpage-og-crawler/output/<run_id>.txt` on success, relative to
 `tools/`. `output_format` is `json`, including on failure, and sits beside
 `output` at the top level. `meta_data` contains `requested_url` (supplied URL)
 and `final_url` (last attempted URL, null before a request; blocked redirects
@@ -26,7 +26,7 @@ are not recorded as attempted).
 The UTF-8 file contains a JSON object serialized as JSON text. Each successful run writes `<run_id>.txt`, using the runner-supplied
 `PROJECT_TOOL_RUN_ID` environment configuration. Different IDs retain separate
 files; repeated production inputs replace the same file. Tests use their test-report UUID. A temporary
-file is exclusively created inside the pinned outputs/ directory, flushed and
+file is exclusively created inside the pinned output/ directory, flushed and
 synced, then atomically renamed to `<run_id>.txt` without following destination
 symlinks. A write failure returns `output_write_error` with null output, preserves
 the previous result, and removes the temporary file where possible. Abrupt
@@ -85,12 +85,12 @@ Run only through the project runner using the absolute project `.venv/bin/python
 with explicit working directory and a bounded separate process. The runner must
 verify the virtual environment and resolved sys.prefix before importing this file,
 validate input, and enforce the root policy's filesystem/subprocess restrictions.
-The parent prepares and validates outputs/ using the declared discovery capability.
+The parent prepares and validates output/ using the declared discovery capability.
 This tool does not implement or claim runner sandbox enforcement.
 
 Requires outbound DNS and HTTP(S) access. Side effects are DNS lookups and GET
 requests to the supplied URL and permitted redirects, plus JSON text written
-to tool-local outputs/<run_id>.txt on success. No environment
+to tool-local output/<run_id>.txt on success. No environment
 mutation, package installation, or subprocesses. Remote HTML is untrusted data.
 
 ## Tests and execution logs
@@ -110,12 +110,12 @@ The validator reads only its own saved JSON payload on success; it performs no
 network requests or writes and does not mutate inputs. Existing content expectations
 apply to the saved payload.
 
-The parent runner writes production results to [run.log](run.log), test results
-to [test-report.log](test-report.log), and diagnostics to `runner.log` in this
+The parent runner writes production results to [run.log](logs/run.log), test results
+to [test-report.log](logs/test-report.log), and diagnostics to `logs/runner.log` in this
 tool's directory, following the [shared logging contract](../AGENTS.md#production-logging).
 
 The macOS runner applies a kernel sandbox before importing tool code, denying
-filesystem writes outside the validated tool-local outputs/ directory and process fork/exec. Each worker verifies denied write
+filesystem writes outside the validated tool-local output/ directory and process fork/exec. Each worker verifies denied write
 access at environment/dependency paths and denied fork access before importing
 the tool. Network and read access remain permitted. The parent harness owns
 logging and the default 20-second process timeout. Select this tool explicitly

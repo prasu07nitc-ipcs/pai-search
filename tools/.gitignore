@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.log
-*/outputs/*
+*/output/*
 .pytest_cache/
 .DS_Store
+*/logs/

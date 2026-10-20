@@ -16,10 +16,10 @@ class OutputSandboxTests(unittest.TestCase):
         cases.append({'case_id': 'balanced-repeat',
                       'input': {'url': 'https://example.com/', 'raw_input': 'Extract Markdown'},
                       'expected': {'status': 'ok', 'markdown_contains': ['documentation examples']}})
-        log = directory / 'run.log'
+        log = directory / 'logs' / 'run.log'
         before = log.read_bytes() if log.exists() else None
         for case in cases:
-            previous = {p.name: p.read_bytes() for p in (directory / 'outputs').glob('*.txt')}
+            previous = {p.name: p.read_bytes() for p in (directory / 'output').glob('*.txt')}
             with tempfile.TemporaryDirectory() as temporary:
                 case_path = Path(temporary) / 'cases.json'
                 case_path.write_text(json.dumps([case]))
@@ -33,12 +33,12 @@ class OutputSandboxTests(unittest.TestCase):
             self.assertEqual(actual['output_format'], 'markdown')
             if actual['status'] != 'ok':
                 self.assertIsNone(actual['output'])
-                self.assertEqual({p.name: p.read_bytes() for p in (directory / 'outputs').glob('*.txt')}, previous)
+                self.assertEqual({p.name: p.read_bytes() for p in (directory / 'output').glob('*.txt')}, previous)
                 continue
-            self.assertEqual(actual['output'], directory.name + '/outputs/' + record['run_id'] + '.txt')
+            self.assertEqual(actual['output'], directory.name + '/output/' + record['run_id'] + '.txt')
             target = runner.ROOT / actual['output']
             for name, content in previous.items():
-                self.assertEqual((directory / 'outputs' / name).read_bytes(), content)
+                self.assertEqual((directory / 'output' / name).read_bytes(), content)
             self.assertFalse(target.is_symlink())
             content = target.read_text(encoding='utf-8')
             self.assertIn('documentation examples', content)
@@ -59,17 +59,17 @@ class OutputSandboxTests(unittest.TestCase):
                     break
             (directory / 'TOOL.md').write_text(
                 f'Name: {directory.name}\nDescription: Temporary sandbox regression fixture.\n'
-                'Entry point: `tool.py:probe() -> dict`\n'
-                'Instructions: [AGENTS.md](AGENTS.md)\nOutput directory: outputs\n')
+                'Entry point: `tool.py:probe(raw_input: str) -> dict`\n'
+                'Instructions: [AGENTS.md](AGENTS.md)\nOutput directory: output\n')
             (directory / 'AGENTS.md').write_text('Temporary regression fixture; no network.\n')
             (directory / 'tool.py').write_text('''
 import os
 from pathlib import Path
 
-def probe() -> dict:
+def probe(raw_input: str) -> dict:
     root = Path(__file__).resolve().parent
     checks = {}
-    output = root / 'outputs' / 'probe.md'
+    output = root / 'output' / 'probe.md'
     output.write_text('# Heading\\n\\n**Bold**\\n', encoding='utf-8')
     checks['output_write'] = output.read_text() == '# Heading\\n\\n**Bold**\\n'
     for label, target in [('tool_root', root / 'forbidden'),
@@ -89,7 +89,7 @@ def probe() -> dict:
         checks['unrelated_read'] = True
     else:
         checks['unrelated_read'] = False
-    link = root / 'outputs' / 'escape'
+    link = root / 'output' / 'escape'
     try:
         link.symlink_to(root.parent, target_is_directory=True)
         try:
@@ -104,14 +104,14 @@ def probe() -> dict:
         if link.is_symlink():
             link.unlink()
     try:
-        os.link(root / 'tool.py', root / 'outputs' / 'hardlink')
+        os.link(root / 'tool.py', root / 'output' / 'hardlink')
     except PermissionError:
         checks['hardlink'] = True
     else:
         checks['hardlink'] = False
-    (root / 'outputs' / (os.environ['PROJECT_TOOL_RUN_ID'] + '.txt')).write_text('{}')
+    (root / 'output' / (os.environ['PROJECT_TOOL_RUN_ID'] + '.txt')).write_text('{}')
     return {'input': {'raw_input': 'sandbox probe', 'processed_input': {}},
-            'output': root.name + '/outputs/' + os.environ['PROJECT_TOOL_RUN_ID'] + '.txt', 'status': 'ok', 'error': None,
+            'output': root.name + '/output/' + os.environ['PROJECT_TOOL_RUN_ID'] + '.txt', 'status': 'ok', 'error': None,
             'output_format': 'json', 'meta_data': {'checks': checks}}
 ''')
             (directory / 'validator.py').write_text('''
@@ -119,14 +119,14 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     return [key for key, passed in actual['meta_data']['checks'].items() if passed is not True]
 ''')
             cases = directory / 'cases.json'
-            cases.write_text(json.dumps([{'case_id': 'boundaries', 'input': {}, 'expected': {'status': 'ok'}}]))
+            cases.write_text(json.dumps([{'case_id': 'boundaries', 'input': {'raw_input': 'sandbox probe'}, 'expected': {'status': 'ok'}}]))
             completed = subprocess.run(
                 [str(runner.PYTHON), '-B', str(runner.ROOT / 'runner.py'),
                  '--tool', directory.name, '--cases', str(cases)],
                 cwd=runner.ROOT, capture_output=True, text=True, timeout=30, check=True)
             record = json.loads(completed.stdout)
             self.assertTrue(record['passed'], record)
-            self.assertFalse((directory / 'run.log').exists())
+            self.assertFalse((directory / 'logs' / 'run.log').exists())
 
 
 if __name__ == '__main__':

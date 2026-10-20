@@ -73,12 +73,12 @@ mount({
     const errors = [];
     const recipients = data.to.split(',').map(value => value.trim());
     if (data.to.length > 2000 || recipients.some(value => !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(value))) {
-      errors.push('Enter valid recipient email addresses separated by commas.');
+      errors.push({field: 'to', message: 'Enter valid recipient email addresses separated by commas.'});
     }
-    if (!data.subject.trim() || data.subject.length > 998 || /[\r\n]/.test(data.subject)) errors.push('Enter a subject of up to 998 characters.');
+    if (!data.subject.trim() || data.subject.length > 998 || /[\r\n]/.test(data.subject)) errors.push({field: 'subject', message: 'Enter a subject of up to 998 characters.'});
     const body = new DOMParser().parseFromString(data.body, 'text/html').body;
-    if (!body.textContent.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()) errors.push('Write a message.');
-    if (data.body.length > 100000) errors.push('Keep the message under 100,000 HTML characters.');
+    if (!body.textContent.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()) errors.push({field: 'body', message: 'Write a message.'});
+    if (data.body.length > 100000) errors.push({field: 'body', message: 'Keep the message under 100,000 HTML characters.'});
     return errors;
   }
 });

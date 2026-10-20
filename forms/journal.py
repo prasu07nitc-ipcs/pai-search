@@ -12,6 +12,9 @@ def record_key(record):
 
 
 def append_records(path, records):
+    if path.parent.is_symlink():
+        raise ValueError("Logs directory must not be a symlink")
+    path.parent.mkdir(exist_ok=True)
     if path.is_symlink():
         raise ValueError("run.log must not be a symlink")
     with path.open("a+b") as stream:

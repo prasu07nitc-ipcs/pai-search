@@ -35,8 +35,7 @@ submission. No attachments or sender credentials are collected.
 ## Actions and output
 
 Header Save button (`save_draft`) saves the complete snapshot without submission validation.
-Submit email (`submit`) validates recipients, subject, and body, records accepted
-or rejected, and freezes the session only when accepted.
+Submit email (`submit`) validates recipients, subject, and body, records an accepted action, and freezes the session only when accepted.
 
 The saved envelope's `meta_data.current_data` contains `to`, `subject`, and `body`
 as strings. A sending agent/tool should read these values and use `body` as HTML.
@@ -46,3 +45,7 @@ Submission saves the email for an agent/tool to send. This form does not deliver
 email or mark it as sent. Do not add direct delivery without user authorization.
 Session files and logs contain email contents and addresses; use temporary
 directories for tests and never print or commit production records.
+
+Validation errors appear inside the affected field border without replacing values.
+Any subsequent form interaction or 60 seconds clears the errors. Invalid browser
+submissions are not persisted; save draft bypasses validation.

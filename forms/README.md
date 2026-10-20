@@ -44,7 +44,7 @@ Create form-<name>/ with exactly these three code files:
 - form.js: import `mount` and optionally `action` from `/runtime/runtime.js`.
   Call `mount({defaults, render(data), collect(), validate(data)})`. Defaults and
   collected data must be JSON objects. collect() must return a complete, lossless
-  snapshot; render() must restore it. validate() returns an array of error strings.
+  snapshot; render() must restore it. validate() returns an array of `{field, message}` errors, where field is the control ID.
   Keep all form-specific behavior here. Custom buttons must use type="button".
 - form.css: local layout and appearance. No external assets are required.
 
@@ -106,8 +106,10 @@ with exactly these top-level fields:
 The output path is relative to forms/ and identifies this same envelope file.
 Form values are in `meta_data.current_data`; initial values and action history
 are preserved alongside them. There is no separate metadata directory. Each button action records a full snapshot, including incomplete draft values.
-Invalid submission records `submit` with `outcome: "rejected"` and keeps the
-session editable. Successful submission records `submit` with `outcome: "accepted"`
+The browser validates before submission and shows errors inside each field border.
+Invalid submissions do not persist an action and keep the session editable. Errors
+clear on the next interaction or after 60 seconds; submission always revalidates.
+The API continues to support rejected actions for existing clients. Successful submission records `submit` with `outcome: "accepted"`
 and sets execution_state to submitted. Older clients default to accepted.
 Existing history, including legacy field-change actions, remains unchanged. Transport errors use
 HTTP errors and leave the last committed envelope unchanged; status/error describe
@@ -170,7 +172,7 @@ Restart the runner and reload open browser sessions afterward.
 
 ## Production run.log
 
-Each form owns an append-only `form-<name>/run.log` in JSON Lines format. The
+Each form owns an append-only `form-<name>/logs/run.log` in JSON Lines format. The
 runner records initialization and every committed action, including rejected
 submissions. Each record is the complete session envelope flattened at the root,
 plus run_id and executed_at. The output attribute is a path string, never a nested

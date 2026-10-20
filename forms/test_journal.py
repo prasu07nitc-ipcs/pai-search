@@ -12,7 +12,7 @@ class JournalTests(unittest.TestCase):
     action = StoreTests.action
 
     def records(self):
-        return [json.loads(line) for line in (self.root / 'form-test' / 'run.log').read_text().splitlines()]
+        return [json.loads(line) for line in (self.root / 'form-test' / 'logs' / 'run.log').read_text().splitlines()]
 
     def test_flattened_contract_initialization_actions_and_retries(self):
         value = self.action(0, {'name': 'Jane'})
@@ -32,7 +32,7 @@ class JournalTests(unittest.TestCase):
     def test_backfill_missing_log_and_partial_tail(self):
         value = self.action(0, {'name': 'Jane'})
         self.action(1, {'name': 'Janet'}, action_id='a2')
-        path = self.root / 'form-test' / 'run.log'
+        path = self.root / 'form-test' / 'logs' / 'run.log'
         path.write_text(path.read_text().splitlines()[0] + '\n' + '{"interrupted":')
         restarted = Store(self.root)
         restarted.recover_logs()
@@ -74,7 +74,7 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(len(self.records()), 1)
 
     def test_corrupt_complete_line_and_symlink_fail_closed(self):
-        path = self.root / 'form-test' / 'run.log'
+        path = self.root / 'form-test' / 'logs' / 'run.log'
         path.write_text('not-json\n')
         with self.assertRaises(ValueError):
             self.store.read('form-test', self.id)

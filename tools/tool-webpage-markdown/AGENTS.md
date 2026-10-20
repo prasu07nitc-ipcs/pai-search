@@ -45,7 +45,7 @@ the tool validates supplied arguments. Rejected values are echoed for diagnosis.
 
 `status` is `ok` or `error`; `error` is null on success or contains exactly
 non-empty string `code` and `message` fields on failure. `output` is null on
-failure and `tool-webpage-markdown/outputs/<run_id>.txt` on success, relative to
+failure and `tool-webpage-markdown/output/<run_id>.txt` on success, relative to
 `tools/`. `output_format` is `markdown`, including on failure, and sits beside
 `output` at the top level. `meta_data` contains `requested_url` (supplied URL)
 and `final_url` (last attempted URL, null before a request; blocked redirects
@@ -54,7 +54,7 @@ are not recorded as attempted).
 The UTF-8 file contains Markdown content directly, without a JSON wrapper. Each successful run writes `<run_id>.txt`, using the runner-supplied
 `PROJECT_TOOL_RUN_ID` environment configuration. Different IDs retain separate
 files; repeated production inputs replace the same file. Tests use their test-report UUID. A temporary
-file is exclusively created inside the pinned outputs/ directory, flushed and
+file is exclusively created inside the pinned output/ directory, flushed and
 synced, then atomically renamed to `<run_id>.txt` without following destination
 symlinks. A write failure returns `output_write_error` with null output, preserves
 the previous result, and removes the temporary file where possible. Abrupt
@@ -104,11 +104,11 @@ by that process timeout. No internal CPU timeout or memory isolation is claimed.
 
 Only execute through the shared runner using the absolute project interpreter.
 The runner verifies sys.prefix, applies its macOS worker sandbox, validates inputs
-and the common six-field result contract, and restricts worker writes to this tool’s real outputs/ directory while blocking subprocesses.
+and the common six-field result contract, and restricts worker writes to this tool’s real output/ directory while blocking subprocesses.
 This tool does not itself establish sandbox enforcement. It reads installed
 packages, makes network requests, and writes only its <run_id>.txt and temporary replacement file; it
-does not change the environment. The parent runner prepares outputs/ using the
-generic `Output directory: outputs` capability in TOOL.md and rejects symlinks
+does not change the environment. The parent runner prepares output/ using the
+generic `Output directory: output` capability in TOOL.md and rejects symlinks
 or hard-linked files there before execution. Its network helpers are local; it does not invoke or import other tools.
 
 From the parent project directory containing `tools/`, derive absolute paths:
@@ -133,7 +133,7 @@ compare sections, identified by their variant headings). Unknown expectation fie
 
 `test-cases.json` includes input rejection and live extraction cases. Live pages
 can change; passing substring checks alone does not establish extraction quality.
-Tests write their UUID-named <run_id>.txt in outputs/; they never write
+Tests write their UUID-named <run_id>.txt in output/; they never write
 production result logs. Content, replacement, and sandbox tests are separate runner
 infrastructure checks. Run them only once dependencies are available, from the
 parent directory:
@@ -149,6 +149,6 @@ Inspect every test record's passed field; assertion failures do not necessarily
 cause a failing harness exit status. Runtime testing must use this environment and
 runner.
 
-The parent runner writes production results to [run.log](run.log), test results
-to [test-report.log](test-report.log), and diagnostics to `runner.log` in this
+The parent runner writes production results to [run.log](logs/run.log), test results
+to [test-report.log](logs/test-report.log), and diagnostics to `logs/runner.log` in this
 tool's directory, following the [shared logging contract](../AGENTS.md#production-logging).

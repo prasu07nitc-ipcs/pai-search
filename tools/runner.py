@@ -30,6 +30,19 @@ PYTHON = ENV / "bin/python"
 LOGGER = logging.getLogger(__name__)
 
 
+def logs_directory(directory):
+    """Prepare runner-owned logs without following directory or file symlinks."""
+    target = directory / "logs"
+    if target.is_symlink():
+        raise ValueError("Logs directory must not be a symlink")
+    target.mkdir(exist_ok=True)
+    for name in ("run.log", "runner.log", "test-report.log"):
+        path = target / name
+        if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink != 1)):
+            raise ValueError("Logs must be regular, unlinked files")
+    return target
+
+
 class DuplicateInputError(ValueError):
     """A previous production execution requires explicit rerun confirmation."""
 
@@ -38,7 +51,7 @@ class DuplicateInputError(ValueError):
 def production_history(directory):
     """Read history under a shared lock without creating a result log."""
     try:
-        history = (directory / "run.log").open("r", encoding="utf-8")
+        history = (directory / "logs" / "run.log").open("r", encoding="utf-8")
     except FileNotFoundError:
         yield ()
         return
@@ -219,10 +232,10 @@ def validate_output(result, tool_name=None, run_id=None):
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
-                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/outputs/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.txt", output) is None
+                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.txt", output) is None
                 or "/../" in output or "/./" in output):
-            raise ValueError("Successful output must reference tool outputs/<run_id>.txt relative to tools/.")
-        if tool_name is not None and output != f"{tool_name}/outputs/{run_id}.txt":
+            raise ValueError("Successful output must reference tool output/<run_id>.txt relative to tools/.")
+        if tool_name is not None and output != f"{tool_name}/output/{run_id}.txt":
             raise ValueError("Output path must match the selected tool and execution run_id.")
     elif output is not None:
         raise ValueError("Failed tool output must be null.")
@@ -249,11 +262,11 @@ def load_module(path, name):
 def output_directory(directory):
     """Resolve the optional tool-local write capability declared in discovery."""
     discovery = (directory / "TOOL.md").read_text(encoding="utf-8")
-    if not re.search(r"^Output directory: outputs\s*$", discovery, re.M):
+    if not re.search(r"^Output directory: output\s*$", discovery, re.M):
         return None
-    target = directory / "outputs"
+    target = directory / "output"
     if target.is_symlink() or (target.exists() and not target.is_dir()):
-        raise ValueError("outputs must be a real tool-local directory.")
+        raise ValueError("output must be a real tool-local directory.")
     if target.exists():
         for base, directories, files in os.walk(target, followlinks=False):
             for name in directories + files:
@@ -361,6 +374,7 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
     if expected is not None and not test_run:
         raise ValueError("Test expectations require test_run=True.")
+    logs_directory(directory)
     input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
     if not test_run and not rerun:
         log_execution(require_new_input)(directory, input_id)
@@ -411,7 +425,7 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
                 worker_stderr = worker_stderr.decode("utf-8", errors="replace")
             LOGGER.info("Worker diagnostics:\n%s", worker_stderr.rstrip())
         if not test_run:
-            with (directory / "run.log").open("a", encoding="utf-8") as log:
+            with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
                 fcntl.flock(log, fcntl.LOCK_EX)
                 log.write(json.dumps(record, ensure_ascii=False) + "\n")
                 log.flush()
@@ -422,8 +436,9 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
 def run_tests(tool_name, cases_path, log_path, *, timeout=20):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
-    if log_path.resolve() != (directory / "test-report.log").resolve():
+    if log_path.resolve() != (directory / "logs" / "test-report.log").resolve():
         raise ValueError("Test results must be written to the selected tool test-report.log.")
+    logs_directory(directory)
     cases = json.loads(cases_path.read_text())
     for case in cases:
         validate_input(directory, entry, case["input"])
@@ -486,11 +501,13 @@ def main():
         parser.error("--log requires --cases")
     if args.rerun and (args.worker or args.cases or args.input is None):
         parser.error("--rerun requires production --input")
+    if not args.worker:
+        logs_directory(directory)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(process)d] %(name)s: %(message)s",
         handlers=[logging.StreamHandler(sys.stderr) if args.worker else
-                  logging.FileHandler(directory / "runner.log", mode="a", encoding="utf-8")],
+                  logging.FileHandler(directory / "logs" / "runner.log", mode="a", encoding="utf-8")],
     )
     # Repeat these checks under logging so their timing is recorded as well.
     verify_environment()
@@ -500,7 +517,7 @@ def main():
         worker(args.tool, payload["input"], payload["expected"], payload["run_id"])
     elif args.cases:
         run_tests(args.tool, args.cases.resolve(),
-                  (args.log or directory / "test-report.log").resolve(), timeout=args.timeout)
+                  (args.log or directory / "logs" / "test-report.log").resolve(), timeout=args.timeout)
     elif args.input is not None:
         value = json.loads(args.input)
         try:

@@ -290,7 +290,7 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
 
     raw_input is a required string supplied by the caller; it is never interpreted.
     URL constraints and the 15-second network budget match _crawl_open_graph.
-    Success atomically replaces tool-local outputs/<run_id>.txt with UTF-8 JSON text.
+    Success atomically replaces tool-local output/<run_id>.txt with UTF-8 JSON text.
     Expected fetch/write failures return output=null and a structured error.
     """
     result: CrawlResult = {
@@ -323,7 +323,7 @@ def _write_output(content: str) -> str:
     descriptor = None
     temporary = None
     try:
-        descriptor = os.open(tool_root / "outputs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptor = os.open(tool_root / "output", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         name = f".output-{uuid.uuid4().hex}.tmp"
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=descriptor)
@@ -334,9 +334,9 @@ def _write_output(content: str) -> str:
             os.fsync(output.fileno())
         os.replace(name, filename, src_dir_fd=descriptor, dst_dir_fd=descriptor)
         temporary = None
-        return f"{tool_root.name}/outputs/{filename}"
+        return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool outputs directory.") from exc
+        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:

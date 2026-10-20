@@ -29,7 +29,7 @@ Validation checks syntax only, not ownership, deliverability, or payment eligibi
 ## Actions and output
 
 Header Save button (`save_draft`) saves the complete snapshot without submission validation.
-Submit details (`submit`) validates the fields, records accepted or rejected, and
+Submit details (`submit`) validates the fields, records an accepted action, and
 freezes the session only when accepted. The saved envelope's
 `meta_data.current_data` contains `name`, `email_id`, `phone_number`, and `upi_id`.
 The shared runtime preserves initial data and action history.
@@ -37,3 +37,7 @@ The shared runtime preserves initial data and action history.
 No email, SMS, payment, or other external request is made. UPI ID is collected as
 text only. Session files and logs contain personal data; use temporary directories
 for tests and never print or commit production records.
+
+Validation errors appear inside the affected field border without replacing values.
+Any subsequent form interaction or 60 seconds clears the errors. Invalid browser
+submissions are not persisted; save draft bypasses validation.

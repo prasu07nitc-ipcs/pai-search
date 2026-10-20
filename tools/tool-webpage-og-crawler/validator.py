@@ -60,12 +60,12 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
         if actual.get("error") is not None or not isinstance(final, str):
             failures.append("Success requires null error and a final URL")
         path = actual.get("output")
-        if path != f"tool-webpage-og-crawler/outputs/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
+        if path != f"tool-webpage-og-crawler/output/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
             return failures + ["Invalid JSON result path"]
         tool_root = Path(__file__).resolve().parent
-        target = tool_root / "outputs" / path.rsplit("/", 1)[-1]
+        target = tool_root / "output" / path.rsplit("/", 1)[-1]
         try:
-            if (tool_root / "outputs").is_symlink() or target.is_symlink() or target.stat().st_nlink != 1:
+            if (tool_root / "output").is_symlink() or target.is_symlink() or target.stat().st_nlink != 1:
                 return failures + ["Result path must be a regular unaliased file"]
             payload = json.loads(target.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:

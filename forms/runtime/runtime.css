@@ -2,3 +2,11 @@
 [data-status] { min-height: 1.5em; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 fieldset:disabled { opacity: .65; }
+
+.field-frame { border: 1px solid #cfd8cc; border-radius: 8px; background: white; overflow: hidden; }
+.field-frame input, .field-frame textarea, .field-frame .editor-shell { border: 0; border-radius: 0; }
+.field-frame:focus-within { outline: 3px solid #dceadd; border-color: #557b63; }
+.field-frame input:focus, .field-frame textarea:focus, .field-frame .editor-shell:focus-within { outline: none; }
+.field-frame.field-invalid { border-color: #a33a32; }
+.field-frame.field-invalid:focus-within { outline-color: #f5dcd8; }
+.field-error { padding: 0 14px 10px; color: #a33a32; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }

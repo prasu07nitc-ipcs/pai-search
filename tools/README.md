@@ -34,9 +34,11 @@ tools/
     ├── tool.py                  Domain implementation
     ├── validator.py             Required tool-specific test validator
     ├── test-cases.json           Test inputs and expectations
-    ├── run.log                  Production execution records
-    ├── runner.log               Python diagnostics and function timings
-    └── test-report.log          Detailed test results
+    ├── output/                  Execution payloads (<run_id>.txt)
+    └── logs/
+        ├── run.log              Production execution records
+        ├── runner.log           Python diagnostics and function timings
+        └── test-report.log      Detailed test results
 ```
 
 Every tool directory must be named `tool-<name>` in lowercase kebab-case, with
@@ -130,7 +132,7 @@ Every tool returns a JSON-serializable object with exactly six fields:
     "raw_input": "Extract metadata from https://example.com/",
     "processed_input": {"url": "https://example.com/"}
   },
-  "output": "tool-webpage-og-crawler/outputs/<run_id>.txt",
+  "output": "tool-webpage-og-crawler/output/<run_id>.txt",
   "output_format": "json",
   "status": "ok",
   "error": null,
@@ -143,7 +145,7 @@ Every tool returns a JSON-serializable object with exactly six fields:
 `raw_input`. Interpretation remains outside the tools. Rejected argument values
 are echoed for diagnosis rather than represented as validated.
 
-`output` points to the selected tool’s `outputs/<run_id>.txt`, relative to `tools/`,
+`output` points to the selected tool’s `output/<run_id>.txt`, relative to `tools/`,
 or is null on failure. `output_format` identifies its content format at the top
 level: the OG tool writes JSON text (`json`); the Markdown tool writes Markdown
 content directly (`markdown`). Compare mode combines nonempty variants as labeled
@@ -187,8 +189,8 @@ run the full tool-specific validator or enforce all annotated return fields.
 
 ## Logging
 
-The parent runner writes production results to `run.log`, test results to
-`test-report.log`, and diagnostics to `runner.log` inside the selected tool's
+The parent runner writes production results to `logs/run.log`, test results to
+`logs/test-report.log`, and diagnostics to `logs/runner.log` inside the selected tool's
 directory. See the [shared logging contract](AGENTS.md#production-logging) for
 record fields, input identifiers, and logging guarantees.
 
@@ -200,9 +202,9 @@ Python is in a virtual environment and that resolved `sys.prefix` matches the
 project `.venv`; shell activation alone is insufficient.
 
 The worker sandbox blocks process fork/exec and denies writes except within a
-validated tool-local `outputs/` directory explicitly declared by
-`Output directory: outputs` in TOOL.md. Tools without that capability remain
-read-only. Symlinks and hard-linked files in outputs/ are rejected. This also
+validated tool-local `output/` directory explicitly declared by
+`Output directory: output` in TOOL.md. Tools without that capability remain
+read-only. Symlinks and hard-linked files in output/ are rejected. This also
 protects the environment, dependency declarations, and lockfiles from worker
 writes. File contents can be read only within the selected tool and required runtime
 and system locations; filesystem metadata remains readable for runtime path
@@ -245,7 +247,7 @@ Run its test cases:
   --cases "$tools_root/tool-webpage-og-crawler/test-cases.json"
 ```
 
-For production inputs, the runner checks the selected tool's `run.log` for a
+For production inputs, the runner checks the selected tool's `logs/run.log` for a
 previous successful execution of the same supplied input object. Matching uses
 the full input, including `raw_input`, without expanding defaults; object key
 order is ignored. Historical successful records without a run ID are included.
@@ -263,13 +265,13 @@ before either has recorded success. Unreadable or malformed history stops the
 check rather than silently allowing execution.
 
 Use `--timeout 30`, for example, to change the worker timeout. `--log` is available
-only with `--cases`, and must resolve to the selected tool's `test-report.log`.
+only with `--cases`, and must resolve to the selected tool's `logs/test-report.log`.
 The internal `--worker` mode is for runner orchestration.
 
 A test-case file is an array of objects containing `case_id`, `input`, and
 `expected`. The shared runner checks an expected `status`; the selected validator
 checks tool-specific expectations. Test records appear on stdout and in
-`test-report.log`. **Inspect each record's `passed` field:** the harness does not
+`logs/test-report.log`. **Inspect each record's `passed` field:** the harness does not
 currently return a failing exit status merely because an assertion failed.
 
 Run infrastructure regression tests through the project interpreter:
@@ -311,3 +313,7 @@ limits, HTML parsing, and JSON-LD extraction. See its
 
 [tool-webpage-markdown](tool-webpage-markdown/TOOL.md) extracts main article content
 in balanced, precision, recall, or compare mode. Its <run_id>.txt contains Markdown directly, with labeled sections in compare mode.
+
+Output folders use `output/`; all logs live in each tool’s `logs/` folder.
+Existing artifacts were relocated without rewriting historical log records; older
+records may still reference the former `outputs/` paths.

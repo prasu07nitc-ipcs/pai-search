@@ -15,6 +15,52 @@ function setFieldsDisabled(disabled) {
 }
 const clone = value => JSON.parse(JSON.stringify(value));
 
+let validationTimer;
+const validationFields = new Map();
+function clearValidation() {
+  clearTimeout(validationTimer);
+  for (const {field, frame, message} of validationFields.values()) {
+    field.removeAttribute('aria-invalid');
+    frame.classList.remove('field-invalid');
+    message.textContent = '';
+    message.hidden = true;
+  }
+}
+function prepareValidation() {
+  for (const field of document.querySelectorAll('[data-fields] input, [data-fields] textarea, [data-fields] [role="textbox"]')) {
+    const frame = document.createElement('div');
+    frame.className = 'field-frame';
+    const surface = field.closest('.editor-shell') || field;
+    surface.before(frame);
+    frame.append(surface);
+    const message = document.createElement('div');
+    message.id = `${field.id}-validation`;
+    message.className = 'field-error';
+    message.hidden = true;
+    frame.append(message);
+    field.setAttribute('aria-describedby', [field.getAttribute('aria-describedby'), message.id].filter(Boolean).join(' '));
+    validationFields.set(field.id, {field, frame, message});
+  }
+  // Capture before button handlers so the triggering submit can display fresh errors.
+  for (const type of ['pointerdown', 'click', 'keydown', 'input', 'change']) {
+    document.querySelector('main').addEventListener(type, clearValidation, true);
+  }
+}
+function showValidation(errors) {
+  clearValidation();
+  for (const error of errors) {
+    const item = validationFields.get(error.field);
+    if (!item) throw new Error(`Unknown validation field: ${error.field}`);
+    item.field.setAttribute('aria-invalid', 'true');
+    item.frame.classList.add('field-invalid');
+    item.message.textContent += (item.message.textContent ? ' ' : '') + error.message;
+    item.message.hidden = false;
+  }
+  validationFields.get(errors[0].field).field.focus();
+  setStatus('Please correct the highlighted fields.');
+  validationTimer = setTimeout(clearValidation, 60000);
+}
+
 async function api(path, body) {
   const response = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
@@ -71,6 +117,7 @@ export function action(name, data = definition.collect(), outcome = 'accepted') 
 
 export async function mount(formDefinition) {
   definition = formDefinition;
+  prepareValidation();
   const infoButton = document.querySelector('[data-info]');
   const infoPanel = document.querySelector('[data-info-panel]');
   if (infoButton && infoPanel) {
@@ -133,8 +180,7 @@ export async function mount(formDefinition) {
       const data = clone(definition.collect());
       const errors = definition.validate(data);
       if (errors.length) {
-        await action('submit', data, 'rejected');
-        if (!failed) setStatus(errors.join(' '));
+        showValidation(errors);
         return;
       }
       // Freeze editing while submission waits behind earlier actions.

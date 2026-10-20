@@ -56,7 +56,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request(path + '/actions', {'action_id': 'a2', 'expected_revision': 0,
             'action_name': 'save_draft', 'data': {}})[0], 409)
         self.assertEqual(self.request('/form-test/output/' + execution_id + '.txt')[0], 404)
-        self.assertEqual(self.request('/form-test/run.log')[0], 404)
+        self.assertEqual(self.request('/form-test/logs/run.log')[0], 404)
         saved = json.loads((Path(self.temp.name) / 'form-test' / 'output' / f'{execution_id}.txt').read_text())
         self.assertEqual(saved['meta_data']['current_data'], {'name': 'Jane'})
 

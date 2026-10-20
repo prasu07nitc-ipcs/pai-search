@@ -48,7 +48,7 @@ class Store:
         self.lock = threading.RLock()
 
     def sync_log(self, value):
-        path = self.form(value["meta_data"]["form"]) / "run.log"
+        path = self.form(value["meta_data"]["form"]) / "logs" / "run.log"
         append_records(path, session_records(value))
 
     def recover_logs(self):
@@ -67,7 +67,7 @@ class Store:
                     records.extend(session_records(json.loads(path.read_text(encoding="utf-8"))))
                 if records:
                     records.sort(key=lambda record: (record["executed_at"], record["run_id"], record["meta_data"]["revision"]))
-                    append_records(folder / "run.log", records)
+                    append_records(folder / "logs" / "run.log", records)
 
     def form(self, name):
         if not isinstance(name, str) or not re.fullmatch(r"form-[a-z0-9]+(?:-[a-z0-9]+)*", name) or len(name) >= 64:
@@ -201,7 +201,7 @@ class Store:
                 failure["status"] = "error"
                 failure["error"] = {"code": "STORAGE_ERROR", "message": "Unable to persist form action"}
                 failure["meta_data"]["failed_action"] = copy.deepcopy(request)
-                append_records(self.form(name) / "run.log", [{"run_id": execution_id,
+                append_records(self.form(name) / "logs" / "run.log", [{"run_id": execution_id,
                     "executed_at": timestamp(), **failure}])
                 raise
             self.sync_log(value)

@@ -19,9 +19,10 @@ class RunnerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name).resolve()
+        (self.directory / 'logs').mkdir()
         (self.directory / 'TOOL.md').write_text('No output directory capability.\n')
         (self.directory / 'tool.py').write_text(
-            'def calculate(count: int, *, label: str = "default") -> dict:\n    pass\n'
+            'def calculate(count: int, *, label: str = "default", raw_input: str = "calculate") -> dict:\n    pass\n'
         )
         handler = logging.NullHandler()
         runner.LOGGER.addHandler(handler)
@@ -38,7 +39,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_shared_contract(self):
         good = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 1}},
-                'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok',
+                'output': 'tool-example/output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok',
                 'error': None, 'output_format': 'json', 'meta_data': {}}
         runner.validate_output(good)
         with self.assertRaisesRegex(ValueError, 'execution run_id'):
@@ -46,8 +47,8 @@ class RunnerTests(unittest.TestCase):
         runner.validate_output(dict(good, status='error', output=None,
                                     error={'code': 'failed', 'message': 'Reason'}))
         bad = [{}, {'status': 'ok'}, dict(good, extra=1), dict(good, output=None),
-               dict(good, output='/tmp/result.json'), dict(good, output='tool-example/outputs/../result.json'),
-               dict(good, output='tool-example/outputs/result.md'),
+               dict(good, output='/tmp/result.json'), dict(good, output='tool-example/output/../result.json'),
+               dict(good, output='tool-example/output/result.md'),
                dict(good, output_format=None), dict(good, output_format=''),
                dict(good, input={'raw_input': 'x', 'processed_input': {}, 'extra': 1}),
                dict(good, input={'raw_input': None, 'processed_input': {}}),
@@ -105,8 +106,8 @@ class RunnerTests(unittest.TestCase):
 
     def test_output_directory_requires_explicit_capability_and_real_directory(self):
         self.assertIsNone(runner.output_directory(self.directory))
-        (self.directory / 'TOOL.md').write_text('Output directory: outputs\n')
-        target = self.directory / 'outputs'
+        (self.directory / 'TOOL.md').write_text('Output directory: output\n')
+        target = self.directory / 'output'
         self.assertEqual(runner.output_directory(self.directory), target)
         target.symlink_to(self.directory, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, 'real tool-local'):
@@ -119,40 +120,40 @@ class RunnerTests(unittest.TestCase):
 
 
     def test_production_output_and_test_isolation(self):
-        result = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 2}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
-        result['output'] = 'tool-example/outputs/' + hashlib.sha256(b'{"count":2}').hexdigest() + '.txt'
+        result = {'input': {'raw_input': 'calculate', 'processed_input': {'count': 2}}, 'output': 'tool-example/output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
+        result['output'] = 'tool-example/output/' + hashlib.sha256(b'{"count":2,"raw_input":"calculate"}').hexdigest() + '.txt'
         completed = subprocess.CompletedProcess([], 0, json.dumps(result), 'worker diagnostics\n')
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
              patch.object(runner.subprocess, 'run', return_value=completed) as execute:
-            self.assertEqual(runner.invoke('tool-example', {'count': 2}), result)
+            self.assertEqual(runner.invoke('tool-example', {'count': 2, 'raw_input': 'calculate'}), result)
             command = execute.call_args.args[0]
             self.assertIn('tool-example', command)
             self.assertEqual(execute.call_args.kwargs['timeout'], 20)
-            log = self.directory / 'run.log'
+            log = self.directory / 'logs' / 'run.log'
             before = log.read_bytes()
             record = json.loads(before)
-            self.assertEqual(record['output'], result)
-            self.assertEqual(set(record), {'run_id', 'executed_at', 'input', 'output', 'status', 'error'})
-            self.assertEqual(record['run_id'], hashlib.sha256(b'{"count":2}').hexdigest())
-            runner.invoke('tool-example', {'count': 2}, test_run=True, timeout=5, run_id=record['run_id'])
+            self.assertEqual(record['output'], result['output'])
+            self.assertEqual(set(record), {'run_id', 'executed_at', 'processed_input', 'raw_input', 'tool_input', 'output', 'output_format', 'status', 'error', 'meta_data'})
+            self.assertEqual(record['run_id'], hashlib.sha256(b'{"count":2,"raw_input":"calculate"}').hexdigest())
+            runner.invoke('tool-example', {'count': 2, 'raw_input': 'calculate'}, test_run=True, timeout=5, run_id=record['run_id'])
             self.assertEqual(log.read_bytes(), before)
             self.assertEqual(execute.call_args.kwargs['timeout'], 5)
 
     def test_production_run_id_is_input_hash_and_preserves_repeated_runs(self):
-        result = {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
+        result = {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}
         def respond(*args, **kwargs):
             payload = json.loads(kwargs['input'])
-            result['output'] = f"tool-example/outputs/{payload['run_id']}.txt"
+            result['output'] = f"tool-example/output/{payload['run_id']}.txt"
             return subprocess.CompletedProcess([], 0, json.dumps(result), '')
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
              patch.object(runner.subprocess, 'run', side_effect=respond):
             for value in ({'count': 2, 'label': 'தமிழ்'},
                           {'label': 'தமிழ்', 'count': 2},
                           {'count': 3, 'label': 'தமிழ்'}):
-                runner.invoke('tool-example', value, rerun=True)
-        records = [json.loads(line) for line in (self.directory / 'run.log').read_text().splitlines()]
+                runner.invoke('tool-example', dict(value, raw_input='calculate'), rerun=True)
+        records = [json.loads(line) for line in (self.directory / 'logs' / 'run.log').read_text().splitlines()]
         self.assertEqual(len(records), 3)
-        expected = hashlib.sha256('{"count":2,"label":"தமிழ்"}'.encode('utf-8')).hexdigest()
+        expected = hashlib.sha256('{"count":2,"label":"தமிழ்","raw_input":"calculate"}'.encode('utf-8')).hexdigest()
         self.assertEqual(records[0]['run_id'], expected)
         self.assertEqual(records[1]['run_id'], expected)
         self.assertNotEqual(records[2]['run_id'], expected)
@@ -167,16 +168,16 @@ class RunnerTests(unittest.TestCase):
             with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
                  patch.object(runner.subprocess, 'run', side_effect=error):
                 with self.assertRaises(type(error)):
-                    runner.invoke('tool-example', {'count': 1}, rerun=True)
-            record = json.loads((self.directory / 'run.log').read_text().splitlines()[-1])
+                    runner.invoke('tool-example', {'count': 1, 'raw_input': 'calculate'}, rerun=True)
+            record = json.loads((self.directory / 'logs' / 'run.log').read_text().splitlines()[-1])
             self.assertIsNone(record['output'])
             self.assertEqual(record['status'], 'error')
-            self.assertEqual(record['run_id'], hashlib.sha256(b'{"count":1}').hexdigest())
+            self.assertEqual(record['run_id'], hashlib.sha256(b'{"count":1,"raw_input":"calculate"}').hexdigest())
             self.assertIn('Worker diagnostics', stream.getvalue())
 
     def test_duplicate_success_requires_confirmation_before_execution(self):
         value = {'count': 2}
-        history = self.directory / 'run.log'
+        history = self.directory / 'logs' / 'run.log'
         # Historical successful records without run_id also count.
         history.write_text(json.dumps({'input': value, 'status': 'ok'}) + '\n')
         before = history.read_bytes()
@@ -191,7 +192,7 @@ class RunnerTests(unittest.TestCase):
         value = {'count': 2, 'label': 'தமிழ்'}
         digest = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
                                           ensure_ascii=False).encode()).hexdigest()
-        history = self.directory / 'run.log'
+        history = self.directory / 'logs' / 'run.log'
         history.write_text(json.dumps({'input': value, 'status': 'error'}) + '\n')
         runner.require_new_input(self.directory, digest)
         history.write_text(json.dumps({'input': dict(reversed(list(value.items()))), 'status': 'ok'}) + '\n')
@@ -222,14 +223,14 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(invoke.call_count, calls)
 
     def test_no_tool_specific_assertions_in_harness(self):
-        packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}, 'failed_checks': []}
+        packet = {'output': {'input': {'raw_input': 'calculate', 'processed_input': {}}, 'output': 'tool-example/output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt', 'status': 'ok', 'error': None, 'output_format': 'json', 'meta_data': {}}, 'failed_checks': []}
         cases = self.directory / 'cases.json'
         cases.write_text(json.dumps([{'case_id': 'generic', 'input': {'count': 1}, 'expected': {'status': 'ok'}}]))
         with patch.object(runner, 'resolve_tool', return_value=(self.directory, 'calculate')), \
              patch.object(runner, 'invoke', return_value=packet), contextlib.redirect_stdout(io.StringIO()):
-            runner.run_tests('tool-example', cases, self.directory / 'test-report.log')
-        self.assertTrue(json.loads((self.directory / 'test-report.log').read_text())['passed'])
-        self.assertFalse((self.directory / 'run.log').exists())
+            runner.run_tests('tool-example', cases, self.directory / 'logs' / 'test-report.log')
+        self.assertTrue(json.loads((self.directory / 'logs' / 'test-report.log').read_text())['passed'])
+        self.assertFalse((self.directory / 'logs' / 'run.log').exists())
 
 
 if __name__ == '__main__':

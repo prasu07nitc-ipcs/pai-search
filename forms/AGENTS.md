@@ -14,14 +14,14 @@ Each output/<execution_id>.txt contains the complete JSON envelope. Its meta_dat
 complete snapshots after each persisted action. Never record visual UI state.
 Persist changes only through explicit button actions using the runtime action queue.
 No background autosave. Each action_name maps to one button with matching
-data-action. Draft saving requires an explicit save_draft button. Submit uses
+data-action. Draft saving requires an explicit save_draft button. Browser submit validates first and persists only accepted submissions; the API supports
 outcome accepted or rejected; preserve existing committed history. Acknowledge saves
 only after durable persistence. Preserve history and reject stale revisions.
 
 Forms are trusted local code, not sandboxed plugins. Serve only on loopback;
 retain host/origin/token protections and allowlisted static routes. Never serve
 output, Python source, or arbitrary filesystem paths as static assets.
-Maintain form-local run.log as flattened JSONL: exactly run_id, executed_at,
+Maintain form-local logs/run.log as flattened JSONL: exactly run_id, executed_at,
 input, output, output_format, status, error, meta_data. output is a relative file
 path, never a nested envelope. Log initialization and committed actions, deduplicate
 by session/revision, and recover missing records from saved history. The runner

@@ -193,7 +193,7 @@ def _extract_markdown(
     Defaults retain images, links, tables, and formatting, exclude comments,
     enable backup extraction and disable deduplication. Requires Trafilatura 2.x.
     Network budget: 15 seconds; response limit: 2 MiB; runner timeout: 60 seconds.
-    Saves UTF-8 Markdown directly in tool-local outputs/<run_id>.txt. Compare joins
+    Saves UTF-8 Markdown directly in tool-local output/<run_id>.txt. Compare joins
     nonempty variants with labeled headings; single modes preserve extracted text.
     Supported Markdown structure is retained; exact CSS/font layout is not.
     Expected failures return structured errors; unexpected exceptions propagate.
@@ -254,7 +254,7 @@ def _write_output(content: str) -> str:
     descriptor = None
     temporary = None
     try:
-        descriptor = os.open(tool_root / "outputs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptor = os.open(tool_root / "output", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         name = f".output-{uuid.uuid4().hex}.tmp"
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                      0o600, dir_fd=descriptor)
@@ -265,9 +265,9 @@ def _write_output(content: str) -> str:
             os.fsync(output.fileno())
         os.replace(name, filename, src_dir_fd=descriptor, dst_dir_fd=descriptor)
         temporary = None
-        return f"{tool_root.name}/outputs/{filename}"
+        return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool outputs directory.") from exc
+        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:
@@ -286,7 +286,7 @@ def extract_markdown(
     include_links: bool = True,
     include_tables: bool = True,
 ) -> dict:
-    """Extract Markdown and save it directly to outputs/<run_id>.txt.
+    """Extract Markdown and save it directly to output/<run_id>.txt.
 
     raw_input is the caller's original request, required and never interpreted.
     URL/options constraints match _extract_markdown; defaults are recorded in
