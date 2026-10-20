@@ -4,12 +4,23 @@ A form is an interactive execution entity. One Python standard-library server
 hosts multiple independent sessions for any form directory. No MCP is required.
 Requires Python 3.10+ and a modern browser with JavaScript modules.
 
+## Runtime environment
+
+The runtime and tests use the dedicated `forms/.venv` environment, separate from
+`tools/.venv`. The runner checks the interpreter before starting or migrating.
+No third-party packages are required. Environment creation or changes require
+explicit user authorization. To recreate an authorized environment from pai-search/:
+
+```sh
+python3 -m venv forms/.venv
+```
+
 ## Start and reuse
 
 From the parent repository (pai-search/):
 
 ```sh
-python3 -B forms/runner.py --form "form-<name>"
+forms/.venv/bin/python -B forms/runner.py --form "form-<name>"
 ```
 
 Replace `form-<name>` with a form directory listed below. Open the printed localhost URL. Keep the process running. Another invocation on
@@ -25,6 +36,7 @@ form's instructions:
 
 - [Contact form](form-contact/AGENTS.md)
 - [Email form](form-email/AGENTS.md)
+- [URL form](form-url/AGENTS.md)
 
 Initial values can be passed as a URI-encoded JSON object in the new-form URL
 fragment (`/new/form-<name>#<encoded-json>`). The browser merges these values over
@@ -152,7 +164,7 @@ personal data, including every persisted intermediate value, and are gitignored.
 
 ## Verification
 
-From forms/: `python3 -B -m unittest -v test_store.py test_journal.py test_http.py`.
+From forms/: `.venv/bin/python -B -m unittest -v test_store.py test_journal.py test_http.py`.
 Tests use temporary form directories and do not write personal data into the example.
 
 ## Migrate existing sessions
@@ -160,7 +172,7 @@ Tests use temporary form directories and do not write personal data into the exa
 Stop all forms runner processes first. From pai-search/, run:
 
 ```sh
-python3 -B forms/runner.py --migrate
+forms/.venv/bin/python -B forms/runner.py --migrate
 ```
 
 The migration replaces each legacy data-only output with its corresponding full
@@ -173,9 +185,8 @@ Restart the runner and reload open browser sessions afterward.
 ## Production run.log
 
 Each form owns an append-only `form-<name>/logs/run.log` in JSON Lines format. The
-runner records initialization and every committed action, including rejected
-submissions. Each record is the complete session envelope flattened at the root,
-plus run_id and executed_at. The output attribute is a path string, never a nested
+runner records only durably submitted executions, once at their final revision. Each record retains the envelope fields at the root with compact metadata,
+plus run_id and executed_at. Log meta_data contains only form, revision, execution_state, and created_at; complete snapshots remain in the output file. The output attribute is a path string, never a nested
 envelope. There are exactly eight root fields:
 
 ```json
@@ -188,27 +199,23 @@ envelope. There are exactly eight root fields:
   "status": "ok",
   "error": null,
   "meta_data": {
-    "execution_id": "<execution_id>",
     "form": "form-example",
-    "created_at": "2026-10-19T10:00:00.000Z",
-    "revision": 0,
-    "execution_state": "in_progress",
-    "initial_data": {},
-    "current_data": {},
-    "action_log": []
+    "revision": 3,
+    "execution_state": "submitted",
+    "created_at": "2026-10-19T10:00:00.000Z"
   }
 }
 ```
 
 run_id is the unique form-session ID, not the input hash used by tools. Revision
-identifies the operation within the session. executed_at is the initialization
-or action timestamp. The saved output file retains its six-field envelope.
+is the highest action revision for the completed session. executed_at is the
+submission timestamp. The completed execution_state is named `submitted`. The saved output file retains its six-field envelope.
 
 The runner commits output first, then locks and appends missing log records,
 flushes and fsyncs before acknowledging success. Startup, session reads, and action
 retries recover missing records from complete saved snapshots. Recovery preserves
-original timestamps and includes revision 0. Existing sessions are backfilled on
-startup; these records describe saved history, not newly executed actions. Recovery
+the original submission timestamp. Only completed sessions are backfilled on
+startup; drafts and intermediate revisions are skipped. Recovery
 appends can appear after newer records, so use executed_at and revision for ordering.
 Repeated reads and successful action retries do not append duplicates.
 
@@ -219,14 +226,10 @@ operations: a failed acknowledgement may still have committed the action, and a
 retry with the same action_id safely finishes logging. Logging failures do not roll
 back committed data. They return an HTTP storage error until recovery succeeds.
 
-Action storage failures are logged when the log remains writable: status is error,
-error contains code/message, and meta_data.failed_action holds the attempted
-request alongside the last committed data. Repeated failures for the same action
-at the same revision are deduplicated. Pre-execution rejection (bad arguments,
-stale revisions, or a submitted session) creates no execution record. Failures
-before session creation or unavailable storage may prevent logging entirely.
+Initialization, draft saves, Reader actions, rejected submissions, and storage
+failures do not create log entries. Complete action history remains in output files.
 
-run.log contains personal data and full cumulative history, increasing disk usage.
+run.log contains input data and compact execution metadata, increasing disk usage.
 It is gitignored, is not served as a static resource, and has no retention limit.
 Tests write only to temporary form directories, never production run.log. Existing
 tools logging is unchanged.

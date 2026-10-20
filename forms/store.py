@@ -50,6 +50,8 @@ class Store:
 
     def sync_log(self, value):
         meta = value["meta_data"]
+        if meta["execution_state"] != "submitted":
+            return
         path = self.form(meta["form"]) / "logs" / "run.log"
         # Cache only revision numbers, never personal data. External changes invalidate
         # every checkpoint for this form so recovery still checks the complete journal.
@@ -203,7 +205,6 @@ class Store:
             outcome = request.get("outcome", "accepted")
             if outcome not in ("accepted", "rejected") or (outcome == "rejected" and action != "submit"):
                 raise ValueError("Invalid action outcome")
-            previous = copy.deepcopy(value)
             state["revision"] += 1
             if action == "submit" and outcome == "accepted":
                 state["execution_state"] = "submitted"
@@ -220,12 +221,6 @@ class Store:
                 if committed == value:
                     self.sync_log(value)
                     raise
-                failure = copy.deepcopy(previous)
-                failure["status"] = "error"
-                failure["error"] = {"code": "STORAGE_ERROR", "message": "Unable to persist form action"}
-                failure["meta_data"]["failed_action"] = copy.deepcopy(request)
-                append_records(self.form(name) / "logs" / "run.log", [{"run_id": execution_id,
-                    "executed_at": timestamp(), **failure}])
                 raise
             self.sync_log(value)
             return value

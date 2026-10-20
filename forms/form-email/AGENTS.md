@@ -8,7 +8,7 @@ in [../README.md](../README.md). Keep email-specific behavior in this folder.
 From pai-search/, run:
 
 ```sh
-python3 -B forms/runner.py --form form-email
+forms/.venv/bin/python -B forms/runner.py --form form-email
 ```
 
 Open the printed localhost URL. Initial values may be supplied as a URI-encoded

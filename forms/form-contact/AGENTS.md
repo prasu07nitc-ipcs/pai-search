@@ -8,7 +8,7 @@ in [../README.md](../README.md). Keep contact-specific behavior in this folder.
 From pai-search/, run:
 
 ```sh
-python3 -B forms/runner.py --form form-contact
+forms/.venv/bin/python -B forms/runner.py --form form-contact
 ```
 
 Open the printed localhost URL. Initial values may be supplied in the URL fragment,

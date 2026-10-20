@@ -1,14 +1,19 @@
 """Append-only, flattened JSONL execution records with retry-safe recovery."""
-import copy
 import fcntl
 import json
 import os
 
 
+META_FIELDS = ('form', 'revision', 'execution_state', 'created_at')
+
+
+def compact_record(record):
+    return {**record, 'meta_data': {key: record['meta_data'][key] for key in META_FIELDS}}
+
+
 def record_key(record):
     meta = record["meta_data"]
-    return (record["run_id"], meta["revision"], record["status"],
-            meta.get("failed_action", {}).get("action_id"))
+    return (record["run_id"], meta["revision"], record["status"])
 
 
 def append_records(path, records):
@@ -29,6 +34,7 @@ def append_records(path, records):
             stream.truncate(complete)
         stream.seek(0, os.SEEK_END)
         for record in records:
+            record = compact_record(record)
             key = record_key(record)
             if key not in keys:
                 payload = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
@@ -44,15 +50,9 @@ def append_records(path, records):
 
 
 def session_records(value, start_revision=0):
-    """Reconstruct committed envelopes, including revision zero, from saved snapshots."""
-    meta = value["meta_data"]
-    for revision in range(start_revision, meta["revision"] + 1):
-        envelope = copy.deepcopy({key: item for key, item in value.items() if key != "meta_data"})
-        state = copy.deepcopy({**meta, "revision": revision, "action_log": meta["action_log"][:revision]})
-        envelope["meta_data"] = state
-        entry = state["action_log"][-1] if revision else None
-        state["current_data"] = copy.deepcopy(entry["data_after"] if entry else state["initial_data"])
-        state["execution_state"] = entry["execution_state"] if entry else "in_progress"
-        envelope["status"], envelope["error"] = "ok", None
-        yield {"run_id": meta["execution_id"],
-               "executed_at": entry["action_time"] if entry else meta["created_at"], **envelope}
+    """Emit only the final, durably submitted execution."""
+    meta = value['meta_data']
+    if meta['execution_state'] != 'submitted' or meta['revision'] < start_revision:
+        return
+    entry = meta['action_log'][-1]
+    yield {'run_id': meta['execution_id'], 'executed_at': entry['action_time'], **value}

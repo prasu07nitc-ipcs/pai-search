@@ -151,7 +151,7 @@ export async function mount(formDefinition) {
       history.replaceState(null, '', `/session/${parts[1]}/${envelope.meta_data.execution_id}`);
     } else {
       envelope = await api(`/api/sessions/${parts[1]}/${parts[2]}?view=current`);
-      definition.render(clone(envelope.meta_data.current_data));
+      definition.render({...clone(definition.defaults), ...clone(envelope.meta_data.current_data)});
     }
     document.querySelector('[data-session]').textContent = envelope.meta_data.execution_id;
     document.querySelector('[data-new]').href = `/new/${envelope.meta_data.form}`;

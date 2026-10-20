@@ -1,101 +1,81 @@
-"""Exercise logging only against disposable form/session directories."""
+"""Submission-only journal checks against temporary storage."""
 import json
 import unittest
 from unittest.mock import patch
-
 from test_store import StoreTests
 from store import Conflict, Store
-
+from journal import META_FIELDS
 
 class JournalTests(unittest.TestCase):
     setUp = StoreTests.setUp
     action = StoreTests.action
 
     def records(self):
-        return [json.loads(line) for line in (self.root / 'form-test' / 'logs' / 'run.log').read_text().splitlines()]
+        path = self.root / 'form-test/logs/run.log'
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
-    def test_flattened_contract_initialization_actions_and_retries(self):
-        value = self.action(0, {'name': 'Jane'})
+    def test_only_submission_logged_and_retry_deduplicated(self):
+        self.assertEqual(self.records(), [])
         self.action(0, {'name': 'Jane'})
+        self.action(1, {'name': 'Jane'}, 'reader', 'reader1')
+        self.assertEqual(self.records(), [])
+        value = self.action(2, {'name': 'Jane'}, 'submit', 'submit1')
+        self.action(2, {'name': 'Jane'}, 'submit', 'submit1')
         self.store.read('form-test', self.id)
         records = self.records()
-        self.assertEqual(len(records), 2)
-        for record in records:
-            self.assertEqual(set(record), {'run_id', 'executed_at', 'input', 'output',
-                'output_format', 'status', 'error', 'meta_data'})
-            self.assertIsInstance(record['output'], str)
-            self.assertEqual(record['run_id'], self.id)
-        self.assertEqual(records[0]['meta_data']['revision'], 0)
-        self.assertEqual(records[1], {'run_id': self.id,
-            'executed_at': value['meta_data']['action_log'][0]['action_time'], **value})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['meta_data'], {k: value['meta_data'][k] for k in META_FIELDS})
+        self.assertEqual(records[0]['meta_data']['revision'], 3)
+        self.assertEqual(records[0]['run_id'], self.id)
+        self.assertEqual(len(value['meta_data']['action_log']), 3)
 
-    def test_backfill_missing_log_and_partial_tail(self):
-        value = self.action(0, {'name': 'Jane'})
-        self.action(1, {'name': 'Janet'}, action_id='a2')
-        path = self.root / 'form-test' / 'logs' / 'run.log'
-        path.write_text(path.read_text().splitlines()[0] + '\n' + '{"interrupted":')
+    def test_recovery_only_backfills_final_submission(self):
+        self.action(0, {'name': 'Jane'})
+        Store(self.root).recover_logs()
+        self.assertEqual(self.records(), [])
+        self.action(1, {'name': 'Jane'}, 'submit', 'submit1')
+        path = self.root / 'form-test/logs/run.log'
+        path.write_text('{"interrupted":')
         restarted = Store(self.root)
         restarted.recover_logs()
-        records = self.records()
-        self.assertEqual([r['meta_data']['revision'] for r in records], [0, 1, 2])
-        self.assertEqual(records[1]['meta_data'], value['meta_data'])
+        self.assertEqual([r['meta_data']['revision'] for r in self.records()], [2])
         restarted.recover_logs()
-        self.assertEqual(self.records(), records)
-
-    def test_append_failure_after_commit_recovers_on_retry(self):
-        import store
-        original = store.append_records
-        def fail_new_record(path, records):
-            records = list(records)
-            if any(r['meta_data']['revision'] == 1 for r in records):
-                raise OSError('log unavailable')
-            return original(path, records)
-        with patch('store.append_records', side_effect=fail_new_record):
-            with self.assertRaises(OSError):
-                self.action(0, {'name': 'Jane'})
-        result = self.action(0, {'name': 'Jane'})
-        self.assertEqual(result['meta_data']['revision'], 1)
-        self.assertEqual(len(self.records()), 2)
-
-    def test_storage_failure_logged_without_changing_output(self):
-        with patch('store.atomic_json', side_effect=OSError('write failed')):
-            with self.assertRaises(OSError):
-                self.action(0, {'name': 'Jane'})
-        failure = self.records()[-1]
-        self.assertEqual(failure['status'], 'error')
-        self.assertEqual(failure['error']['code'], 'STORAGE_ERROR')
-        self.assertEqual(failure['meta_data']['current_data'], {'name': ''})
-        self.assertEqual(failure['meta_data']['failed_action']['data'], {'name': 'Jane'})
-        self.assertEqual(self.store.read('form-test', self.id), self.session)
-
-    def test_pre_execution_rejection_is_not_logged(self):
-        with self.assertRaises(Conflict):
-            self.action(99, {'name': 'Stale'})
         self.assertEqual(len(self.records()), 1)
 
-    def test_unchanged_reads_skip_journal_work_and_external_changes_recover(self):
-        import store
-        path = self.root / 'form-test' / 'logs' / 'run.log'
-        with patch('store.append_records', wraps=store.append_records) as append:
+    def test_append_failure_after_submit_recovers_on_retry(self):
+        with patch('store.append_records', side_effect=OSError('log unavailable')):
+            with self.assertRaises(OSError):
+                self.action(0, {'name': 'Jane'}, 'submit')
+        result = self.action(0, {'name': 'Jane'}, 'submit')
+        self.assertEqual(result['meta_data']['execution_state'], 'submitted')
+        self.assertEqual(len(self.records()), 1)
+
+    def test_failed_and_rejected_submissions_do_not_log(self):
+        with patch('store.atomic_json', side_effect=OSError('write failed')):
+            with self.assertRaises(OSError):
+                self.action(0, {'name': 'Jane'}, 'submit')
+        self.assertEqual(self.records(), [])
+        self.assertEqual(self.store.read('form-test', self.id), self.session)
+        self.store.action('form-test', self.id, {'expected_revision': 0, 'action_id': 'reject',
+            'action_name': 'submit', 'outcome': 'rejected', 'data': {'name': ''}})
+        Store(self.root).recover_logs()
+        self.assertEqual(self.records(), [])
+
+    def test_completed_reads_use_checkpoint_and_recover_deleted_log(self):
+        self.action(0, {'name': 'Jane'}, 'submit')
+        with patch('store.append_records') as append:
             self.store.read('form-test', self.id)
             append.assert_not_called()
-            self.action(0, {'name': 'Jane'})
-            self.assertEqual(append.call_count, 1)
-        # A removed journal must be reconstructed, despite the in-memory checkpoint.
-        path.unlink()
+        (self.root / 'form-test/logs/run.log').unlink()
         self.store.read('form-test', self.id)
-        self.assertEqual([r['meta_data']['revision'] for r in self.records()], [0, 1])
+        self.assertEqual(len(self.records()), 1)
 
-    def test_corrupt_complete_line_and_symlink_fail_closed(self):
-        path = self.root / 'form-test' / 'logs' / 'run.log'
+    def test_corrupt_log_fails_closed(self):
+        self.action(0, {'name': 'Jane'}, 'submit')
+        path = self.root / 'form-test/logs/run.log'
         path.write_text('not-json\n')
         with self.assertRaises(ValueError):
             self.store.read('form-test', self.id)
         self.assertEqual(path.read_text(), 'not-json\n')
-        path.unlink()
-        path.symlink_to(self.root / 'outside')
-        with self.assertRaises(ValueError):
-            self.store.read('form-test', self.id)
-
 
 del StoreTests

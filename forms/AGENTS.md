@@ -23,12 +23,17 @@ retain host/origin/token protections and allowlisted static routes. Never serve
 output, Python source, or arbitrary filesystem paths as static assets.
 Maintain form-local logs/run.log as flattened JSONL: exactly run_id, executed_at,
 input, output, output_format, status, error, meta_data. output is a relative file
-path, never a nested envelope. Log initialization and committed actions, deduplicate
-by session/revision, and recover missing records from saved history. The runner
-owns locked, flushed log writes. Pre-execution rejection is not logged; action
-storage failures are logged with status error and failed_action metadata when
-logging remains available. Never alter committed history or mix test fixtures
+path, never a nested envelope. Log only durably submitted executions, once per
+session at its final revision. Recover missing final records from output files.
+The runner owns locked, flushed log writes. Initialization, draft saves, Reader,
+rejected submissions, and storage failures do not create log entries.
+meta_data contains only form, revision, execution_state, and created_at at its root.
+Output files retain complete metadata and history. Never mix test fixtures
 with production logs. Session files and logs contain personal data: do not print
 their contents into diagnostics or commit them. Test only in temporary directories.
-Run tests with Python 3.10+ using the standard library; no environment creation or
-package installation is needed. Existing tools/ policies apply within tools/ only.
+Use Python 3.10+ from forms/.venv/bin/python for the runtime and tests. The runner
+requires this project virtual environment and never installs packages or falls
+back to another interpreter. Keep .venv/ gitignored. Environment creation or changes
+and dependency installation require explicit user authorization. Use only the
+standard library; no package installation is needed. Existing tools/ policies
+apply within tools/ only.

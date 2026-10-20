@@ -2,6 +2,7 @@
 import argparse
 import json
 import secrets
+import sys
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,6 +12,13 @@ from store import Conflict, Store
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 2 * 1024 * 1024
+ENV = ROOT / ".venv"
+
+
+def verify_environment():
+    """Require the forms project virtual environment for runtime execution."""
+    if sys.prefix == sys.base_prefix or Path(sys.prefix).resolve() != ENV.resolve():
+        raise RuntimeError(f"Run with {ENV / 'bin' / 'python'}; the forms virtual environment is required.")
 
 
 def current_view(value):
@@ -134,6 +142,10 @@ def main():
     parser.add_argument("--form", default="form-contact")
     parser.add_argument("--migrate", action="store_true", help="Migrate legacy metadata into output files with the server stopped, then exit")
     args = parser.parse_args()
+    try:
+        verify_environment()
+    except RuntimeError as exc:
+        parser.error(str(exc))
     if args.migrate:
         print(f"Migrated {Store(ROOT).migrate()} sessions into output files.")
         return
