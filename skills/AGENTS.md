@@ -86,6 +86,13 @@ with exactly these fields (values below illustrate the structure):
 - `output` is exactly `output/<run_id>.txt`, relative to this skill's root.
   Save the complete result directly: JSON object/array, text (including empty),
   or Markdown. `output_format` is `json`, `text`, or `markdown` accordingly.
+- For every new run with `output_format: "json"`, pretty-print the saved result
+  with two-space indentation, unescaped Unicode, and one trailing newline
+  (for example, `json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n"`).
+  Preserve all values and key order. This applies to completed and failed JSON
+  results; skill-specific compact JSON response rules apply only to chat output.
+  Text and Markdown results retain their original formatting. Keep existing file
+  paths and cached outputs unchanged; do not reformat historical runs.
 - `status` is `completed` for a finished workflow, including budget exhaustion,
   or `failed` for a handled component/execution failure. Preserve domain statuses
   inside the result. `error` is null for completion, otherwise exactly nonempty
