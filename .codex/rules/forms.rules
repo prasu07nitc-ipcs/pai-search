@@ -1,0 +1,23 @@
+# Run from the pai-search repository root using this exact argument order.
+# Prefix matching also permits trailing runner arguments.
+prefix_rule(
+    pattern = [
+        "forms/.venv/bin/python",
+        "-B",
+        "forms/runner.py",
+        "--form",
+        ["form-url", "form-email", "form-contact"],
+    ],
+    decision = "allow",
+    justification = "Launch approved project forms through their dedicated runner",
+    match = [
+        "forms/.venv/bin/python -B forms/runner.py --form form-url",
+        "forms/.venv/bin/python -B forms/runner.py --form form-email",
+        "forms/.venv/bin/python -B forms/runner.py --form form-contact",
+    ],
+    not_match = [
+        "forms/.venv/bin/python -B forms/runner.py --migrate",
+        "forms/.venv/bin/python -m pip install example",
+        "forms/.venv/bin/python -B forms/runner.py --form form-unknown",
+    ],
+)

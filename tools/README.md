@@ -197,7 +197,9 @@ record fields, input identifiers, and logging guarantees.
 ## Environment and security
 
 The current runner requires macOS and Python 3.11 or later. Project tool execution
-must use `tools/.venv/bin/python` by its absolute path. The runner checks that
+must use the repository-relative command `tools/.venv/bin/python -B tools/runner.py`
+from the repository root, followed by `--tool` and the selected tool name. This
+prefix matches `.codex/rules/tools.rules`. The runner checks that
 Python is in a virtual environment and that resolved `sys.prefix` matches the
 project `.venv`; shell activation alone is insufficient.
 
@@ -223,18 +225,13 @@ does not install packages, repair environments, or fall back to another runtime.
 ## Usage
 
 All commands below start in the **parent project directory containing `tools/`**.
-They assume the authorized project environment already exists. Derive absolute
-paths at runtime:
-
-```sh
-tools_root="$(pwd -P)/tools"
-tools_python="$tools_root/.venv/bin/python"
-```
+They assume the authorized project environment already exists. Keep the command
+prefix and argument order shown below so the approval rule matches.
 
 Run the existing crawler in production:
 
 ```sh
-"$tools_python" -B "$tools_root/runner.py" \
+tools/.venv/bin/python -B tools/runner.py \
   --tool tool-webpage-og-crawler \
   --input '{"raw_input":"Extract metadata from https://example.com/","url":"https://example.com/"}'
 ```
@@ -242,9 +239,9 @@ Run the existing crawler in production:
 Run its test cases:
 
 ```sh
-"$tools_python" -B "$tools_root/runner.py" \
+tools/.venv/bin/python -B tools/runner.py \
   --tool tool-webpage-og-crawler \
-  --cases "$tools_root/tool-webpage-og-crawler/test-cases.json"
+  --cases tools/tool-webpage-og-crawler/test-cases.json
 ```
 
 For production inputs, the runner checks the selected tool's `logs/run.log` for a
@@ -277,7 +274,7 @@ execution fails, and 0 only when every case passes.
 Run infrastructure regression tests through the project interpreter:
 
 ```sh
-"$tools_python" -B "$tools_root/test_runner.py"
+tools/.venv/bin/python -B tools/test_runner.py
 ```
 
 These infrastructure tests exercise runner behavior using mocks and do not import
