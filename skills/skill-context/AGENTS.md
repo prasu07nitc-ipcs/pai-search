@@ -10,33 +10,31 @@ The source must be semantically complete, contain at least one coherent paragrap
 
 ## Configuration and confirmation
 
-Default settings:
+Defaults: `max_iterations = 5`, `termination_threshold = 0.8`. The iteration
+limit is a positive integer; threshold is finite and nonnegative. Exclude booleans.
+Only these settings are overridable. Explicit defaults need no confirmation.
 
-```json
-{
-  "max_iterations": 5,
-  "termination_threshold": 0.8
-}
-```
-
-- `max_iterations` must be a positive integer, excluding booleans.
-- `termination_threshold` must be a finite, nonnegative number, excluding booleans. Scores may exceed 1; do not restrict thresholds to percentages.
-- Omitted settings use the defaults. Explicit values equal to defaults do not require confirmation.
-- If either valid supplied setting differs from its default, show both effective values and ask: "Confirm running with max_iterations = <value> and termination_threshold = <value>? These override the defaults of 5 and 0.8."
-- Explain that this confirmation is required by this file's configuration rule. Wait for an explicit affirmative response before performing encoding, decoding, or validation with overridden values. The initial request for custom values alone is not confirmation.
-- If settings change after confirmation, obtain confirmation of the new effective values. Do not ask again for an unchanged configuration already confirmed in the same run.
-- A decline or missing answer does not authorize the overrides or a silent fallback run. If the user requests defaults instead, proceed with defaults.
-- Only these two runtime settings are overridable through this contract. Overrides do not waive project conventions, input validation, score-integrity checks, or the zero-critical-differences acceptance requirement.
+For a nondefault setting, show both effective values and ask: "Confirm running
+with max_iterations = <value> and termination_threshold = <value>? These override
+the defaults of 5 and 0.8." Explain that this file requires confirmation. Wait for
+explicit agreement; the initial override request is insufficient. Reconfirm only
+changed settings, including budget extensions. A decline or silence does not
+permit fallback execution; use defaults only if requested. Overrides never waive
+validation, score integrity, or zero-critical-difference acceptance.
 
 ## Component integration and data contracts
 
-Read these component instructions once per run; reuse their contracts for subsequent iterations:
+After the shared cache lookup misses, read these processing contracts once and
+reuse them across iterations:
 
 - [Encoding](../skill-context-encoder/AGENTS.md)
 - [Decoding](../skill-context-decoder/AGENTS.md)
 - [Comparison](../skill-context-validator/AGENTS.md)
 
-These are workflow dependencies, not the authorities for this skill's external input or output contract. Do not modify component files or project conventions during a run. If a dependency is unavailable or its interface is incompatible, stop with a dependency error rather than inventing its output.
+Apply these procedures as internal stages of this execution, without independent
+component runs, caches, or log entries. Their contracts do not override this
+skill's external interface. Do not modify dependencies; missing or incompatible
+interfaces produce a dependency error.
 
 The candidate entity representation is a JSON array. Each object has exactly these fields:
 
@@ -62,7 +60,8 @@ The comparison receives the unchanged original as `text_1` and the current recon
 8. Decode the revised array and compare again against the unchanged original, supplying the frozen `reference_units` and fixed weights. Increment the iteration count for every completed candidate cycle. Apply the same integrity and acceptance checks.
 9. If the last permitted iteration fails acceptance, stop with `max_iterations_reached`. Do not claim convergence or silently extend the budget. A requested budget extension is a configuration change requiring confirmation before further work.
 
-Compare consecutive scores to show improvement, regression, or unchanged results, but never use this delta as the acceptance score. The threshold always applies to the discrepancy against the original. Difference IDs are local to each comparison; match explanations and reference links rather than assuming identical IDs mean identical discrepancies across iterations.
+Consecutive scores indicate change only; acceptance always compares against the
+original. Difference IDs are local: match explanations/reference links across cycles.
 
 ## Candidate selection and errors
 
@@ -89,15 +88,16 @@ Use the comparison's returned inventory and differences in `validation`, keeping
 
 Confirmation questions and invalid-input explanations are exceptions to the final JSON format. Do not fabricate final artifacts or mark a run completed while confirmation is pending.
 
-## Execution efficiency
+## Execution and persistence
 
-Keep the original, frozen reference inventory, and effective weights in memory for
-one run. Do not reload unchanged instructions or regenerate the reference inventory
-between iterations. Repair only demonstrated discrepancies; reuse an unchanged
-entity array when only decoding needs correction. Reuse a reconstruction or full
-comparison only when its exact inputs, inventory, and weights are unchanged within
-this run; never infer a score for changed text. A reused complete cycle still counts
-against the iteration budget and must be recorded honestly. Stop immediately on
-acceptance; do not perform extra polishing cycles. Keep intermediate artifacts
-internal and emit the specified final JSON once, compactly, without commentary.
-Do not remove required output fields or original details to reduce tokens.
+Follow [shared execution logging](../AGENTS.md#execution-logging). Check the cache
+before loading component instructions or performing any stage. Use `json` format
+for a loop result, including `component_error`; log that domain failure as `failed`.
+
+Keep the original, frozen inventory, weights, and best candidate in memory. Do not
+reload unchanged instructions. Reuse an entity array when only decoding needs
+repair; reuse reconstruction/comparison only for exactly unchanged inputs,
+inventory, and weights. A reused complete cycle still counts toward the budget.
+Stop immediately at acceptance or budget exhaustion; no extra polishing or
+uncounted retries. Keep intermediate artifacts internal and emit compact final
+JSON once. Required fields and fidelity take precedence over token savings.

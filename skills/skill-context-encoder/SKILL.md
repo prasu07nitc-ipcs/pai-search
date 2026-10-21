@@ -5,5 +5,5 @@ description: Extract context from a complete text blob into a JSON array of enti
 
 # Context encoder
 
-Read [AGENTS.md](AGENTS.md) for the input, processing, and output contract.
-Load it once per run; emit only its specified result.
+Read [AGENTS.md](AGENTS.md) and follow the
+[shared execution policy and logging](../AGENTS.md). Return only the specified result.
