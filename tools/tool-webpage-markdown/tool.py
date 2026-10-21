@@ -1,4 +1,30 @@
-"""Extract reader-style Markdown from a public webpage with Trafilatura."""
+"""Extract reader-style Markdown from a public webpage with Trafilatura.
+
+Runtime integration (owned by the shared runner, not this module):
+Use only tools/.venv/bin/python through tools/runner.py with an explicit tool
+selection and working directory. The runner verifies sys.prefix and input binding,
+then applies and probes the macOS filesystem/subprocess sandbox before import.
+Workers may write only in their validated tool-local output/ directory, and cannot
+fork/exec or mutate the environment. The parent validates/prepares output/ and
+owns all log writes; this module does not implement sandbox enforcement.
+
+The parent writes production results to logs/run.log, test results to
+logs/test-report.log, and diagnostics/timing to logs/runner.log under this tool.
+Record formats and run-ID rules: tools/AGENTS.md#production-logging. Tests use
+UUIDs; production IDs hash supplied input. The runner supplies PROJECT_TOOL_RUN_ID
+before import. Historical logs and outputs are not rewritten automatically.
+
+From the parent project directory containing tools/, select this tool with the
+absolute project interpreter and runner paths. --input accepts named JSON
+arguments; --cases accepts this tool's test-cases.json. --summary emits compact
+test counts; inspect failed cases (CLI exit 1), not just process completion.
+The runner loads validator.py only for tests and enforces the production envelope
+without loading test code. Do not install/repair dependencies during execution.
+
+Select --tool tool-webpage-markdown --timeout 60, especially for compare mode.
+Requires Python 3.11+ and Trafilatura >=2.0,<3.0 in tools/.venv. The dependency
+check follows argument validation and precedes downloading; it never installs.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +41,9 @@ from typing import Literal
 from urllib.parse import quote, urldefrag, urljoin, urlsplit
 
 
+# Identity encoding avoids decompression beyond the 2-MiB body cap.
+# Socket deadlines bound individual operations; blocking DNS additionally needs
+# the runner process timeout (default 20s, configurable up to 300s).
 _LIMIT = 2 * 1024 * 1024
 _SECONDS = 15.0
 
@@ -62,6 +91,8 @@ def _validate(url: str):
 
 
 def _addresses(host: str, port: int):
+    # Reject a mixed public/private DNS answer, then pin the first validated IP.
+    # This prevents later connection-time DNS resolution from changing the target.
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except socket.gaierror:
@@ -125,8 +156,10 @@ def _download(url: str) -> dict:
                 if parts.query:
                     target += "?" + quote(parts.query, safe="/%?:@!$&'()*+,;=-._~")
                 result["final_url"] = current
+                # Fixed Firefox-style identity for site compatibility; this is
+                # still an HTTP client with no browser rendering or browser state.
                 connection.request("GET", target, headers={
-                    "User-Agent": "WebpageMarkdown/1.0",
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0",
                     "Accept": "text/html, application/xhtml+xml",
                     "Accept-Encoding": "identity",
                     "Connection": "close",
@@ -160,6 +193,8 @@ def _download(url: str) -> dict:
                         chunks.extend(block)
                         if len(chunks) > _LIMIT:
                             raise _Failure("response_too_large", "The HTML response exceeds 2 MiB.")
+                    # Decode the declared charset; absent/unknown labels fall back
+                    # to UTF-8 with replacement rather than aborting extraction.
                     charset = response.headers.get_content_charset() or "utf-8"
                     try:
                         html = chunks.decode(charset, errors="replace")
@@ -248,6 +283,8 @@ def _extract_markdown(
 
 def _write_output(content: str) -> str:
     """Atomically replace <run_id>.md using a pinned tool-local directory."""
+    # Runner-supplied IDs allow SHA-256 production inputs and UUID test runs.
+    # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
     run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
     if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
@@ -256,6 +293,10 @@ def _write_output(content: str) -> str:
     descriptor = None
     temporary = None
     try:
+        # Pin the directory without following symlinks. Exclusive temporary
+        # creation plus flush/fsync/replace preserves an old result on failure.
+        # Same-ID concurrent writes are last-replacement-wins; abrupt termination
+        # can leave a temporary file for later cleanup.
         descriptor = os.open(tool_root / "output", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         name = f".output-{uuid.uuid4().hex}.tmp"
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,

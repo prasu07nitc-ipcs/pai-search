@@ -1,4 +1,13 @@
-"""Read-only checks for the Markdown envelope and saved UTF-8 content."""
+"""Read-only checks for the Markdown envelope and saved UTF-8 content.
+
+Test integration: check_result(value, actual, expected) returns failure strings
+(or an empty list). The sandboxed runner loads this module only for tests.
+Checks read only the selected saved Markdown and do not fetch, write, or mutate
+inputs. Expectations are status (also checked by the runner), error_code,
+markdown_contains, markdown_not_contains, and variants_nonempty. Unknown fields
+fail validation. Live-page substring assertions do not establish extraction
+quality; output replacement and worker isolation are runner-level tests.
+"""
 import os
 from pathlib import Path
 

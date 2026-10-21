@@ -1,6 +1,16 @@
-"""Crawler-specific assertions, loaded only by the sandboxed runner during tests."""
+"""Crawler-specific assertions, loaded only by the sandboxed runner during tests.
+
+Test integration: check_result(value, actual, expected) returns failure strings
+(or an empty list). The sandboxed runner loads this module only after invoking
+the crawler in a test worker; production never imports it. Checks read only the
+selected output and do not fetch, write, or mutate input. The runner checks status;
+local expectations are error_code, required_properties, property_values,
+required_metadata, metadata_values, and parser_cases (offline HTML fixtures).
+Property expectations use saved root keys, including type and section.
+"""
 from __future__ import annotations
 
+import hashlib
 import os
 
 
@@ -8,8 +18,11 @@ def _check_payload(value: dict, actual: dict, expected: dict) -> list[str]:
     failures = []
     if "error_code" in expected and (actual.get("error") or {}).get("code") != expected["error_code"]:
         failures.append("Unexpected error code")
-    if set(actual) != {"requested_url", "final_url", "status", "title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified", "error"}:
+    if set(actual) != {"requested_url", "final_url", "status", "title", "description", "image", "url", "site_name", "type", "section", "keywords", "datePublished", "dateModified", "page_id", "error"}:
         failures.append("Incorrect top-level fields")
+    expected_page_id = hashlib.sha256(actual["url"].encode("utf-8")).hexdigest() if isinstance(actual.get("url"), str) else None
+    if actual.get("page_id") != expected_page_id:
+        failures.append("page_id must be SHA-256 of the saved URL, or null for a missing URL")
     for key in ("keywords", "datePublished", "dateModified"):
         if actual.get(key) is not None and not isinstance(actual[key], str):
             failures.append(f"Incorrect {key} type")
@@ -19,7 +32,7 @@ def _check_payload(value: dict, actual: dict, expected: dict) -> list[str]:
     for key in expected.get("required_metadata", []):
         if not actual.get(key):
             failures.append(f"Missing non-empty {key}")
-    keys = {"title", "description", "image", "url", "site_name"}
+    keys = {"title", "description", "image", "url", "site_name", "type", "section"}
     graph = {key: actual.get(key) for key in keys}
     if not isinstance(graph, dict) or set(graph) != keys or any(item is not None and not isinstance(item, str) for item in graph.values()):
         failures.append("Incorrect Open Graph schema")
@@ -70,12 +83,12 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             payload = json.loads(target.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             return failures + [f"Cannot read JSON result: {exc}"]
-        if not isinstance(payload, dict) or set(payload) != {"title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified"}:
+        if not isinstance(payload, dict) or set(payload) != {"title", "description", "image", "url", "site_name", "type", "section", "keywords", "datePublished", "dateModified", "page_id"}:
             return failures + ["Incorrect saved JSON fields"]
     elif actual.get("status") == "error":
         if actual.get("output") is not None:
             failures.append("Error must have null output")
-        payload = dict.fromkeys(("title", "description", "image", "url", "site_name", "keywords", "datePublished", "dateModified"))
+        payload = dict.fromkeys(("title", "description", "image", "url", "site_name", "type", "section", "keywords", "datePublished", "dateModified", "page_id"))
     else:
         return failures + ["Invalid status"]
     if actual.get("output_format") != "json":
@@ -83,4 +96,15 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     legacy = dict(payload, status=actual.get("status"), error=actual.get("error"),
                   requested_url=meta.get("requested_url"), final_url=meta.get("final_url"))
     failures.extend(_check_payload(value, legacy, expected))
+    # Exercise HTML parsing offline inside the existing sandboxed test worker.
+    if "parser_cases" in expected:
+        import sys
+        parser_class = sys.modules["project_tool_webpage_og_crawler"]._Parser
+        for case in expected["parser_cases"]:
+            parser = parser_class()
+            parser.feed(case["html"])
+            parser.close()
+            for field, wanted in case["metadata"].items():
+                if parser.metadata[field] != wanted:
+                    failures.append(f"Parser case {case['id']}: unexpected {field}")
     return failures

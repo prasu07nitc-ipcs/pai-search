@@ -1,7 +1,33 @@
-"""Fetch Open Graph properties, keywords, and dates; standard library only."""
+"""Fetch Open Graph properties, keywords, and dates; standard library only.
+
+Runtime integration (owned by the shared runner, not this module):
+Use only tools/.venv/bin/python through tools/runner.py with an explicit tool
+selection and working directory. The runner verifies sys.prefix and input binding,
+then applies and probes the macOS filesystem/subprocess sandbox before import.
+Workers may write only in their validated tool-local output/ directory, and cannot
+fork/exec or mutate the environment. The parent validates/prepares output/ and
+owns all log writes; this module does not implement sandbox enforcement.
+
+The parent writes production results to logs/run.log, test results to
+logs/test-report.log, and diagnostics/timing to logs/runner.log under this tool.
+Record formats and run-ID rules: tools/AGENTS.md#production-logging. Tests use
+UUIDs; production IDs hash supplied input. The runner supplies PROJECT_TOOL_RUN_ID
+before import. Historical logs and outputs are not rewritten automatically.
+
+From the parent project directory containing tools/, select this tool with the
+absolute project interpreter and runner paths. --input accepts named JSON
+arguments; --cases accepts this tool's test-cases.json. --summary emits compact
+test counts; inspect failed cases (CLI exit 1), not just process completion.
+The runner loads validator.py only for tests and enforces the production envelope
+without loading test code. Do not install/repair dependencies during execution.
+
+Select --tool tool-webpage-og-crawler; keep the process timeout at least 20
+seconds (the runner default). Python 3.11+ standard library only.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import ipaddress
 import json
@@ -33,7 +59,10 @@ class _PayloadResult(TypedDict):
     error: CrawlError | None
 
 
-_PROPERTIES = ("og:title", "og:description", "og:image", "og:url", "og:site_name")
+_PROPERTIES = ("og:title", "og:description", "og:image", "og:url", "og:site_name", "og:type", "article:section")
+# Identity encoding avoids decompression beyond the 2-MiB body cap.
+# Socket deadlines bound individual operations; blocking DNS additionally needs
+# the runner process timeout (default 20s, configurable up to 300s).
 _LIMIT = 2 * 1024 * 1024
 _SECONDS = 15.0
 
@@ -42,6 +71,48 @@ class _Failure(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+# Explicit date labels only: separator/case variants are normalized, not inferred.
+_DATE_LABELS = {
+    "datePublished": {
+        "datepublished", "published", "publisheddate", "publishedtime",
+        "publishedat", "publishdate", "publishtime", "publicationdate",
+        "publicationtime", "pubdate", "dtpublished", "originalpublicationdate",
+        "articlepublished", "articlepublisheddate", "articlepublishedtime",
+        "articlepublicationdate", "ogarticlepublished", "ogarticlepublishedtime",
+        "ogdatepublished", "ogpubdate", "ogpublishdate", "ogpublishedtime",
+        "rnewsdatepublished", "citationpublicationdate", "dcdateissued",
+        "dcdatepublication", "dctermsissued", "dcissued",
+        "dcsextarticlefirstpublished", "parselypubdate", "btpubdate",
+        "shareaholicarticlepublishedtime", "mediatorpublishedtime",
+        "cxenseparserecspublishtime", "twtpublishedat", "vrpublishedtime",
+    },
+    "dateModified": {
+        "dtupdated", "datemodified", "dateupdated", "dateupdate", "modified", "updated",
+        "modifieddate", "modifiedtime", "modifiedat", "updateddate",
+        "updatedtime", "updatedat", "updatedate", "updatetime",
+        "lastmodified", "lastmodifieddate", "lastmodifiedtime", "lastmod",
+        "lastupdated", "lastupdateddate", "lastupdatedtime", "lastupdate",
+        "modificationdate", "modificationtime", "revisiondate",
+        "articlemodified", "articlemodifieddate", "articlemodifiedtime",
+        "articlepostmodified", "articleupdatedtime", "ogarticlemodifiedtime",
+        "ogmodifiedtime", "ogupdatedtime", "ogdatemodified",
+        "dcmodified", "dcdatemodified", "dctermsmodified",
+        "rnewsdatemodified", "btmoddate",
+    },
+}
+_DATE_FIELDS = {label: field for field, labels in _DATE_LABELS.items() for label in labels}
+
+
+def _date_field(label: str) -> str | None:
+    # Schema.org URLs/CURIEs use the same local names as plain microdata keys.
+    label = label.strip().lower()
+    for prefix in ("https://schema.org/", "http://schema.org/", "schema:"):
+        if label.startswith(prefix):
+            label = label[len(prefix):]
+            break
+    return _DATE_FIELDS.get(re.sub(r"[\s:._-]+", "", label))
 
 
 class _Parser(HTMLParser):
@@ -57,20 +128,32 @@ class _Parser(HTMLParser):
         attributes = dict(attrs)
         if tag == "script" and (attributes.get("type") or "").lower().strip() == "application/ld+json":
             self._jsonld = []
-        if tag != "meta":
+        if tag == "meta":
+            key = attributes.get("property") or attributes.get("name")
+            value = (attributes.get("content") or "").strip()
+            if key in self.values and value and self.values[key] is None:
+                self.values[key] = value
+            metadata_key = (key or attributes.get("itemprop") or "").lower()
+            if metadata_key == "keywords" and value and self.metadata["keywords"] is None:
+                self.metadata["keywords"] = value
+        else:
+            value = (attributes.get("content") or attributes.get("datetime") or "").strip()
+        if not value:
             return
-        key = attributes.get("property") or attributes.get("name")
-        value = (attributes.get("content") or "").strip()
-        if key in self.values and value and self.values[key] is None:
-            self.values[key] = value
-        aliases = {
-            "keywords": "keywords", "datepublished": "datePublished",
-            "datemodified": "dateModified", "article:published_time": "datePublished",
-            "article:modified_time": "dateModified",
-        }
-        metadata_key = aliases.get((key or attributes.get("itemprop") or "").lower())
-        if metadata_key and value and self.metadata[metadata_key] is None:
-            self.metadata[metadata_key] = value
+        # Inspect every semantic attribute so an unrelated name cannot hide itemprop.
+        # A time element may additionally label its datetime using class/id tokens.
+        for attribute in ("property", "name", "itemprop", "http-equiv"):
+            label = attributes.get(attribute) or ""
+            labels = label.split() if attribute in ("property", "itemprop") else [label]
+            for item in labels:
+                field = _date_field(item)
+                if field and self.metadata[field] is None:
+                    self.metadata[field] = value
+        if tag == "time":
+            for label in ((attributes.get("class") or "").split() + [attributes.get("id") or ""]):
+                field = _date_field(label)
+                if field and self.metadata[field] is None:
+                    self.metadata[field] = value
 
     def handle_data(self, data):
         if self._jsonld is not None:
@@ -91,14 +174,17 @@ class _Parser(HTMLParser):
             if isinstance(node, list):
                 pending.extend(reversed(node))
             elif isinstance(node, dict):
-                for key in self.metadata:
-                    value = node.get(key)
-                    if key == "keywords" and isinstance(value, list):
+                for key, value in node.items():
+                    field = "keywords" if key == "keywords" else _date_field(key)
+                    if not field:
+                        continue
+                    if field == "keywords" and isinstance(value, list):
                         value = ", ".join(item.strip() for item in value if isinstance(item, str) and item.strip())
-                    if isinstance(value, str) and value.strip() and self.metadata[key] is None:
-                        self.metadata[key] = value.strip()
-                if "@graph" in node:
-                    pending.append(node["@graph"])
+                    if isinstance(value, str) and value.strip() and self.metadata[field] is None:
+                        self.metadata[field] = value.strip()
+                # Follow article/page relationships, not author/review/product dates.
+                children = [node[key] for key in ("@graph", "mainEntity", "mainEntityOfPage") if key in node]
+                pending.extend(reversed(children))
 
     handle_startendtag = handle_starttag
 
@@ -140,6 +226,8 @@ def _validate(url: str):
 
 
 def _addresses(host: str, port: int):
+    # Reject a mixed public/private DNS answer, then pin the first validated IP.
+    # This prevents later connection-time DNS resolution from changing the target.
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except socket.gaierror:
@@ -212,8 +300,10 @@ def _crawl_open_graph(url: str) -> _PayloadResult:
                 if parts.query:
                     target += "?" + quote(parts.query, safe="/%?:@!$&'()*+,;=-._~")
                 result["final_url"] = current
+                # Fixed Firefox-style identity for site compatibility; this is
+                # still an HTTP client with no browser rendering or browser state.
                 connection.request("GET", target, headers={
-                    "User-Agent": "WebpageOGCrawler/1.0",
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0",
                     "Accept": "text/html, application/xhtml+xml",
                     "Accept-Encoding": "identity",
                     "Connection": "close",
@@ -247,6 +337,8 @@ def _crawl_open_graph(url: str) -> _PayloadResult:
                         chunks.extend(block)
                         if len(chunks) > _LIMIT:
                             raise _Failure("response_too_large", "The HTML response exceeds 2 MiB.")
+                    # Decode the declared charset; absent/unknown labels fall back
+                    # to UTF-8 with replacement rather than aborting extraction.
                     charset = response.headers.get_content_charset() or "utf-8"
                     try:
                         html = chunks.decode(charset, errors="replace")
@@ -303,8 +395,9 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
     if payload["status"] == "error":
         result["error"] = payload["error"]
         return result
-    content = {key.removeprefix("og:"): item for key, item in payload["open_graph"].items()}
+    content = {key.split(":", 1)[-1]: item for key, item in payload["open_graph"].items()}
     content.update({key: payload[key] for key in ("keywords", "datePublished", "dateModified")})
+    content["page_id"] = hashlib.sha256(content["url"].encode("utf-8")).hexdigest() if content["url"] is not None else None
     try:
         path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
         result.update(status="ok", output=path)
@@ -315,6 +408,8 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
 
 def _write_output(content: str) -> str:
     """Atomically replace <run_id>.txt using a pinned tool-local directory."""
+    # Runner-supplied IDs allow SHA-256 production inputs and UUID test runs.
+    # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
     run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
     if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
@@ -323,6 +418,10 @@ def _write_output(content: str) -> str:
     descriptor = None
     temporary = None
     try:
+        # Pin the directory without following symlinks. Exclusive temporary
+        # creation plus flush/fsync/replace preserves an old result on failure.
+        # Same-ID concurrent writes are last-replacement-wins; abrupt termination
+        # can leave a temporary file for later cleanup.
         descriptor = os.open(tool_root / "output", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         name = f".output-{uuid.uuid4().hex}.tmp"
         fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
