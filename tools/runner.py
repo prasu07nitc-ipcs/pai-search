@@ -237,10 +237,10 @@ def validate_output(result, tool_name=None, run_id=None):
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
-                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.txt", output) is None
+                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.(?:txt|md)", output) is None
                 or "/../" in output or "/./" in output):
-            raise ValueError("Successful output must reference tool output/<run_id>.txt relative to tools/.")
-        if tool_name is not None and output != f"{tool_name}/output/{run_id}.txt":
+            raise ValueError("Successful output must reference tool output/<run_id>.txt or <run_id>.md relative to tools/.")
+        if tool_name is not None and output not in {f"{tool_name}/output/{run_id}.txt", f"{tool_name}/output/{run_id}.md"}:
             raise ValueError("Output path must match the selected tool and execution run_id.")
     elif output is not None:
         raise ValueError("Failed tool output must be null.")

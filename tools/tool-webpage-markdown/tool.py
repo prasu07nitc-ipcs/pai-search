@@ -183,17 +183,17 @@ def _download(url: str) -> dict:
 def _extract_markdown(
     url: str,
     mode: Literal["balanced", "precision", "recall", "compare"] = "balanced",
-    include_images: bool = True,
-    include_links: bool = True,
+    include_images: Literal[False] = False,
+    include_links: Literal[False] = False,
     include_tables: bool = True,
 ) -> dict:
     """Extract a public URL as Markdown, optionally comparing three modes.
 
     URL: absolute HTTP(S), <=8192 characters, without credentials or whitespace.
-    Defaults retain images, links, tables, and formatting, exclude comments,
+    Defaults retain tables and formatting, exclude images, links, and comments,
     enable backup extraction and disable deduplication. Requires Trafilatura 2.x.
     Network budget: 15 seconds; response limit: 2 MiB; runner timeout: 60 seconds.
-    Saves UTF-8 Markdown directly in tool-local output/<run_id>.txt. Compare joins
+    Saves UTF-8 Markdown directly in tool-local output/<run_id>.md. Compare joins
     nonempty variants with labeled headings; single modes preserve extracted text.
     Supported Markdown structure is retained; exact CSS/font layout is not.
     Expected failures return structured errors; unexpected exceptions propagate.
@@ -206,6 +206,8 @@ def _extract_markdown(
             raise _Failure("invalid_options", "Unsupported extraction mode.")
         if any(type(flag) is not bool for flag in (include_images, include_links, include_tables)):
             raise _Failure("invalid_options", "Inclusion options must be booleans.")
+        if include_images is not False or include_links is not False:
+            raise _Failure("invalid_options", "Images and links must be disabled.")
         try:
             from importlib.metadata import version
             from trafilatura import extract
@@ -224,8 +226,8 @@ def _extract_markdown(
             markdown = extract(
                 downloaded["html"], url=downloaded["final_url"],
                 output_format="markdown", include_formatting=True,
-                include_comments=False, include_images=include_images,
-                include_links=include_links, include_tables=include_tables,
+                include_comments=False, include_images=False,
+                include_links=False, include_tables=include_tables,
                 fast=False, favor_precision=selected == "precision",
                 favor_recall=selected == "recall", deduplicate=False,
                 with_metadata=False, only_with_metadata=False,
@@ -245,12 +247,12 @@ def _extract_markdown(
 
 
 def _write_output(content: str) -> str:
-    """Atomically replace <run_id>.txt using a pinned tool-local directory."""
+    """Atomically replace <run_id>.md using a pinned tool-local directory."""
     tool_root = Path(__file__).resolve().parent
     run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
     if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
         raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
-    filename = f"{run_id}.txt"
+    filename = f"{run_id}.md"
     descriptor = None
     temporary = None
     try:
@@ -267,7 +269,7 @@ def _write_output(content: str) -> str:
         temporary = None
         return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool output directory.") from exc
+        raise _Failure("output_write_error", "Could not save <run_id>.md in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:
@@ -282,16 +284,16 @@ def extract_markdown(
     url: str,
     raw_input: str,
     mode: Literal["balanced", "precision", "recall", "compare"] = "balanced",
-    include_images: bool = True,
-    include_links: bool = True,
+    include_images: Literal[False] = False,
+    include_links: Literal[False] = False,
     include_tables: bool = True,
 ) -> dict:
-    """Extract Markdown and save it directly to output/<run_id>.txt.
+    """Extract Markdown and save it directly to output/<run_id>.md.
 
     raw_input is the caller's original request, required and never interpreted.
     URL/options constraints match _extract_markdown; defaults are recorded in
     input.processed_input. Expected failures return output=null; successful paths
-    are relative to tools/. Success atomically replaces the previous <run_id>.txt.
+    are relative to tools/. Success atomically replaces the previous <run_id>.md.
     """
     processed = {"url": url, "mode": mode, "include_images": include_images,
                  "include_links": include_links, "include_tables": include_tables}

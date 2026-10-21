@@ -11,8 +11,8 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             failures.append(message)
 
     processed = {"url": value.get("url"), "mode": value.get("mode", "balanced"),
-                 "include_images": value.get("include_images", True),
-                 "include_links": value.get("include_links", True),
+                 "include_images": value.get("include_images", False),
+                 "include_links": value.get("include_links", False),
                  "include_tables": value.get("include_tables", True)}
     check(set(actual) == {"input", "output", "output_format", "status", "error", "meta_data"}, "Incorrect envelope fields")
     check(actual.get("input") == {"raw_input": value.get("raw_input"), "processed_input": processed},
@@ -30,9 +30,9 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     if actual.get("status") == "ok":
         check(actual.get("error") is None, "Success requires null error")
         check(isinstance(final, str) and bool(final), "Success requires final_url")
-        if actual.get("output") != f"tool-webpage-markdown/output/{os.environ['PROJECT_TOOL_RUN_ID']}.txt":
+        if actual.get("output") != f"tool-webpage-markdown/output/{os.environ['PROJECT_TOOL_RUN_ID']}.md":
             return failures + ["Incorrect output path"]
-        target = Path(__file__).resolve().parent / "output" / (os.environ["PROJECT_TOOL_RUN_ID"] + ".txt")
+        target = Path(__file__).resolve().parent / "output" / (os.environ["PROJECT_TOOL_RUN_ID"] + ".md")
         try:
             if target.parent.is_symlink() or target.is_symlink() or not target.is_file() or target.stat().st_nlink != 1:
                 return failures + ["Output must be a regular unaliased file"]
@@ -48,10 +48,10 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     else:
         check(False, "Invalid status")
     for key in expected:
-        check(key in {"status", "error_code", "markdown_contains", "variants_nonempty"}, f"Unsupported expectation: {key}")
+        check(key in {"status", "error_code", "markdown_contains", "markdown_not_contains", "variants_nonempty"}, f"Unsupported expectation: {key}")
     if "error_code" in expected:
         check((actual.get("error") or {}).get("code") == expected["error_code"], "Unexpected error code")
-    for key in ("markdown_contains", "variants_nonempty"):
+    for key in ("markdown_contains", "markdown_not_contains", "variants_nonempty"):
         items = expected.get(key, [])
         if not isinstance(items, list) or not all(isinstance(x, str) and x.strip() for x in items):
             check(False, f"{key} must contain nonempty strings")
@@ -59,6 +59,8 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
         for item in items:
             if key == "markdown_contains":
                 check(item in content, f"Missing Markdown substring: {item}")
+            elif key == "markdown_not_contains":
+                check(item not in content, f"Unexpected Markdown substring: {item}")
             else:
                 marker = f"# {item}\n\n"
                 check(processed["mode"] == "compare" and item in ("balanced", "precision", "recall")

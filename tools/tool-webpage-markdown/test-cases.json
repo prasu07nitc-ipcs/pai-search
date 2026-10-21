@@ -42,6 +42,11 @@
       "status": "ok",
       "markdown_contains": [
         "This domain is for use in documentation examples"
+      ],
+      "markdown_not_contains": [
+        "https://iana.org/domains/example",
+        "](",
+        "!["
       ]
     }
   },
@@ -58,6 +63,11 @@
         "balanced",
         "precision",
         "recall"
+      ],
+      "markdown_not_contains": [
+        "https://iana.org/domains/example",
+        "](",
+        "!["
       ]
     }
   }

@@ -14,16 +14,20 @@ Inputs (named JSON arguments):
 | raw_input | str | required | Original user request, preserved verbatim; empty strings allowed; never interpreted by the tool |
 | url | str | required | Absolute HTTP(S) URL, at most 8192 characters, no credentials, whitespace, controls, backslashes, or invalid hostname/port |
 | mode | Literal["balanced", "precision", "recall", "compare"] | balanced | Extraction strategy; compare produces three independent variants |
-| include_images | bool | true | Include supported image references, without fetching images |
-| include_links | bool | true | Preserve supported links and destinations |
+| include_images | Literal[False] | false | Must be false; image references are excluded |
+| include_links | Literal[False] | false | Must be false; retain linked text without link destinations |
 | include_tables | bool | true | Include supported table content |
+
+Always excludes images and hyperlink destinations in every extraction mode.
+The inclusion arguments accept only false; true is rejected. Linked text is retained
+as plain text. Existing output files are not rewritten automatically.
 
 Always uses Markdown output, formatting enabled, comments excluded, backup
 extraction enabled (`fast=False`), deduplication disabled, and metadata output
 and metadata requirements disabled. Balanced sets both favor flags false;
 precision sets only favor_precision; recall sets only favor_recall. Comparison
 runs all three on the same downloaded HTML. There is no guarantee of perfect
-precision or recall. Layouts, code, tables, captions, and image references may
+precision or recall. Layouts, code, tables, and captions may
 lose fidelity. Missing JavaScript-generated content cannot be recovered.
 
 ## Dependencies and configuration
@@ -45,17 +49,17 @@ the tool validates supplied arguments. Rejected values are echoed for diagnosis.
 
 `status` is `ok` or `error`; `error` is null on success or contains exactly
 non-empty string `code` and `message` fields on failure. `output` is null on
-failure and `tool-webpage-markdown/output/<run_id>.txt` on success, relative to
+failure and `tool-webpage-markdown/output/<run_id>.md` on success, relative to
 `tools/`. `output_format` is `markdown`, including on failure, and sits beside
 `output` at the top level. `meta_data` contains `requested_url` (supplied URL)
 and `final_url` (last attempted URL, null before a request; blocked redirects
 are not recorded as attempted).
 
-The UTF-8 file contains Markdown content directly, without a JSON wrapper. Each successful run writes `<run_id>.txt`, using the runner-supplied
+The UTF-8 file contains Markdown content directly, without a JSON wrapper. Each successful run writes `<run_id>.md`, using the runner-supplied
 `PROJECT_TOOL_RUN_ID` environment configuration. Different IDs retain separate
 files; repeated production inputs replace the same file. Tests use their test-report UUID. A temporary
 file is exclusively created inside the pinned output/ directory, flushed and
-synced, then atomically renamed to `<run_id>.txt` without following destination
+synced, then atomically renamed to `<run_id>.md` without following destination
 symlinks. A write failure returns `output_write_error` with null output, preserves
 the previous result, and removes the temporary file where possible. Abrupt
 termination may leave temporary files. Concurrent successes with the same ID use last replacement wins semantics.
@@ -70,11 +74,11 @@ nonempty variants in balanced, precision, recall order, separated by two newline
 with each variant introduced by `# balanced`, `# precision`, or `# recall`, then
 a blank line and that variant’s content. Empty variants are omitted; all empty
 variants produce `extraction_empty`. Compare formatting labels the variants but
-does not merge, rank, or invent extracted content. No separate .md or JSON files
+does not merge, rank, or invent extracted content. No separate text or JSON files
 are generated.
 
 Markdown preserves supported semantic structure: headings, paragraphs, lists,
-emphasis, links, image references, tables, and code formatting where extraction
+emphasis, tables, and code formatting where extraction
 retains them. Exact fonts, font sizes, CSS layouts, tabs, and spacing cannot be
 preserved in general; appearance depends on the Markdown renderer. No missing
 headings or content are invented.
@@ -106,7 +110,7 @@ Only execute through the shared runner using the absolute project interpreter.
 The runner verifies sys.prefix, applies its macOS worker sandbox, validates inputs
 and the common six-field result contract, and restricts worker writes to this tool’s real output/ directory while blocking subprocesses.
 This tool does not itself establish sandbox enforcement. It reads installed
-packages, makes network requests, and writes only its <run_id>.txt and temporary replacement file; it
+packages, makes network requests, and writes only its <run_id>.md and temporary replacement file; it
 does not change the environment. The parent runner prepares output/ using the
 generic `Output directory: output` capability in TOOL.md and rejects symlinks
 or hard-linked files there before execution. Its network helpers are local; it does not invoke or import other tools.
@@ -125,15 +129,16 @@ tools_root="$(pwd -P)/tools"
 `validator.py` exposes `check_result(value: dict, actual: dict, expected: dict) -> list[str]`.
 It checks the envelope, preserved raw input and applied defaults, mode/URL
 metadata, output_format, run-ID path, saved Markdown, and error invariants. It
-reads only <run_id>.txt and performs no writes, network requests, or argument
+reads only <run_id>.md and performs no writes, network requests, or argument
 mutation. Supported expectations:
 status (shared runner), error_code (exact), markdown_contains (list of literal
-substrings in single-mode Markdown), variants_nonempty (list of required nonempty
+substrings in single-mode Markdown), markdown_not_contains (list of forbidden literal
+substrings), variants_nonempty (list of required nonempty
 compare sections, identified by their variant headings). Unknown expectation fields fail validation.
 
 `test-cases.json` includes input rejection and live extraction cases. Live pages
 can change; passing substring checks alone does not establish extraction quality.
-Tests write their UUID-named <run_id>.txt in output/; they never write
+Tests write their UUID-named <run_id>.md in output/; they never write
 production result logs. Content, replacement, and sandbox tests are separate runner
 infrastructure checks. Run them only once dependencies are available, from the
 parent directory:
