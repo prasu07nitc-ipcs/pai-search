@@ -117,3 +117,11 @@ check the result once. Do not perform encoding, decoding, or iterative refinemen
 Use compact JSON; preserve every required field and material detail. Follow
 [shared execution logging](../AGENTS.md#execution-logging) with `json` format.
 Check the cache before comparison; keep intermediate reasoning internal.
+
+## Execution response
+
+After the prescribed result, display the persisted run entry according to
+[shared execution logging](../AGENTS.md#displayed-execution-entry), including a
+link to `input/<run_id>.txt` containing the verbatim raw input. This presentation
+is an exception to the result-only formatting rules above; saved result content
+and internal component-stage interfaces retain their specified formats.

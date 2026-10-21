@@ -63,3 +63,11 @@ Valid text without context-bearing information yields `[]`. No extra keys,
 headings, fences, or commentary. Do not decode or compare unless requested.
 Follow [shared execution logging](../AGENTS.md#execution-logging) with `json` format;
 check the cache before extraction.
+
+## Execution response
+
+After the prescribed result, display the persisted run entry according to
+[shared execution logging](../AGENTS.md#displayed-execution-entry), including a
+link to `input/<run_id>.txt` containing the verbatim raw input. This presentation
+is an exception to the result-only formatting rules above; saved result content
+and internal component-stage interfaces retain their specified formats.

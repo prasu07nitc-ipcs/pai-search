@@ -43,7 +43,11 @@ After input validation and required confirmation, inspect the selected skill's
 - Matching hash: require identical `raw_input`, the expected output path, a valid
   record, and a readable regular output file matching its format and result
   contract. Return the saved contents, including handled failures, without
-  re-execution, rerun confirmation, rewriting files, or another log entry.
+  re-execution, rerun confirmation, rewriting files, or another log entry. For
+  records with `input`, also require the expected input path and a readable regular
+  UTF-8 file whose contents exactly equal `raw_input`. Display the saved entry as
+  described below. Historical records without `input` remain valid; show their
+  raw input inline and indicate that no saved input file exists.
 - Missing/invalid referenced output, malformed history, conflicting same-hash
   records, or an output without a matching record: report a cache/storage error.
   Do not silently rerun, overwrite, or infer completion. The same active agent
@@ -64,6 +68,7 @@ with exactly these fields (values below illustrate the structure):
   "started_at": "2026-10-21T10:00:00Z",
   "completed_at": "2026-10-21T10:00:12Z",
   "raw_input": "Original user request",
+  "input": "input/c84cfb5e42d76a3d5f07c4837730a40b3c086335a02c3482a30b41dafc330fe7.txt",
   "output": "output/c84cfb5e42d76a3d5f07c4837730a40b3c086335a02c3482a30b41dafc330fe7.txt",
   "output_format": "json",
   "status": "completed",
@@ -74,6 +79,10 @@ with exactly these fields (values below illustrate the structure):
 
 - Timestamps are actual, timezone-aware UTC ISO 8601 times; completion is captured
   when processing finishes. Never fabricate timing or historical runs.
+- `input` is exactly `input/<run_id>.txt`, relative to this skill’s root. Save
+  `raw_input` verbatim as UTF-8, without an added newline or normalization. Retain
+  the inline `raw_input` field for identity checks and history compatibility.
+  This field is required for new records; never rewrite historical records.
 - `output` is exactly `output/<run_id>.txt`, relative to this skill's root.
   Save the complete result directly: JSON object/array, text (including empty),
   or Markdown. `output_format` is `json`, `text`, or `markdown` accordingly.
@@ -88,25 +97,50 @@ with exactly these fields (values below illustrate the structure):
 
 ### Persistence and response
 
-Resolve paths from the skill root; create `output/` and `logs/` only for real
+Resolve paths from the skill root; create `input/`, `output/`, and `logs/` only for real
 execution. Reject symlinked directories/files and hard-linked destination files;
 keep writes within the skill. Ordinary file/shell tools may perform persistence.
 
-Validate the result, stage it in a temporary UTF-8 file inside `output/`, flush
-and fsync. Acquire an exclusive lock on `logs/run.log`; reread history and recheck
+Validate the result. Stage raw input and result in temporary UTF-8 files inside
+`input/` and `output/` respectively; flush and fsync both. Acquire an exclusive lock on `logs/run.log`; reread history and recheck
 identity before publishing. If another agent committed the input, discard the
-candidate and return its valid saved result. Otherwise atomically publish output,
+candidate files and return its valid saved result and displayed entry. Otherwise
+atomically publish each of the input and output files,
 then append, flush, and fsync the record before releasing the lock. Disallow
 non-finite JSON numbers. Never rewrite history or overwrite a committed result.
 Concurrent misses may both process; this protocol prevents duplicate commits,
 not duplicate computation.
 
 An identical existing record means a persistence retry succeeded; conflicting
-records are errors. On output failure, append nothing. On log failure, retain
-output and retry with the original record/ID. If storage remains unavailable,
+records are errors. On input or output failure, append nothing. On log failure, retain
+input and output and retry with the original record/ID. If storage remains unavailable,
 report the failure and saved location without claiming success; storage/cache
-errors are exceptions to output-only responses. Otherwise return only the skill's
-prescribed result. Keep intermediate reasoning and logging operations internal.
+errors are exceptions to the normal response. Otherwise return the skill's
+prescribed result followed by the Markdown execution entry below. Keep the saved
+result file in its original format, without the displayed entry or extra fields.
+Keep intermediate reasoning and logging operations internal.
+
+### Displayed execution entry
+
+After a finished execution or cache hit, show the corresponding persisted
+`logs/run.log` entry as a Markdown table with `Field` and `Value` columns. This is
+an explicit exception to each skill's result-only/no-Markdown response rule,
+including empty decoder output and handled failures. Do not create an entry for
+invalid input, pending confirmation, or management requests. Internal component
+stages do not produce separate tables.
+
+Include every record field in stored order. Render `raw_input` as a clickable
+link to the saved input file rather than repeating its contents; render `input`
+and `output` as clickable file links too. Resolve link destinations to absolute
+paths at response time; keep paths in maintained instructions and JSON records
+relative to the skill root. Escape table delimiters, backticks, and line breaks
+in field values; display objects as compact JSON and null as `null`. Derive all
+values from the actual committed entry. A cache hit displays its original
+timestamps and status, accompanied by `Cached result; no new execution.` outside
+the table. Never invent a file link for a historical entry without a saved input.
+
+The Markdown is a presentation of the JSON Lines entry; `logs/run.log` itself
+remains JSON Lines. The new `input` field supplies its persisted input reference.
 
 ## Skill conventions and validation
 

@@ -6,4 +6,4 @@ description: Extract context from a complete text blob into a JSON array of enti
 # Context encoder
 
 Read [AGENTS.md](AGENTS.md) and follow the
-[shared execution policy and logging](../AGENTS.md). Return only the specified result.
+[shared execution policy and logging](../AGENTS.md). Return the specified result followed by the Markdown execution entry required by the shared policy.

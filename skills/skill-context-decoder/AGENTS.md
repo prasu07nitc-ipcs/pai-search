@@ -48,3 +48,11 @@ original wording. For `[]`, return empty text. No headings, fences, or commentar
 Follow [shared execution logging](../AGENTS.md#execution-logging), using `text`
 format, including an empty output file for `[]`. Check the cache first. Load no
 other component instructions and perform no additional transformations.
+
+## Execution response
+
+After the prescribed result, display the persisted run entry according to
+[shared execution logging](../AGENTS.md#displayed-execution-entry), including a
+link to `input/<run_id>.txt` containing the verbatim raw input. This presentation
+is an exception to the result-only formatting rules above; saved result content
+and internal component-stage interfaces retain their specified formats.
