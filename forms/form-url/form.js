@@ -1,7 +1,7 @@
 import {mount, action} from '/runtime/runtime.js';
 
 const urlInput = document.getElementById('url');
-const choices = ['bookmark', 'index'];
+const choices = ['bookmark', 'read', 'index'];
 function validURL(value) {
   if (!/^https?:\/\//i.test(value) || /\s/.test(value)) return false;
   try {
@@ -11,7 +11,7 @@ function validURL(value) {
 }
 
 const definition = {
-  defaults: {url: '', bookmark: false, index: false},
+  defaults: {url: '', bookmark: false, read: false, index: false},
   collect() {
     return {url: urlInput.value, ...Object.fromEntries(choices.map(name => [name, document.getElementById(name).checked]))};
   },
@@ -19,8 +19,9 @@ const definition = {
     if (typeof data.url !== 'string') throw new Error('url must be text');
     urlInput.value = data.url;
     for (const name of choices) {
-      if (typeof data[name] !== 'boolean') throw new Error(`${name} must be a boolean`);
-      document.getElementById(name).checked = data[name];
+      const value = name === 'read' && !Object.hasOwn(data, name) ? false : data[name];
+      if (typeof value !== 'boolean') throw new Error(`${name} must be a boolean`);
+      document.getElementById(name).checked = value;
     }
   },
   validate(data) {

@@ -11,7 +11,7 @@
 <body>
   <main>
     <header><span class="eyebrow">URL</span><div class="header-actions"><button type="button" data-info aria-label="about this form" title="about this form" aria-expanded="false" aria-controls="form-info"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button><button type="button" form="entry-form" data-action="save_draft" title="save draft" aria-label="save draft" disabled><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h9"/></svg></button><a data-new href="/new/form-url" title="create new form" aria-label="create new form"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></a></div></header>
-    <aside id="form-info" data-info-panel aria-label="About this form" hidden><p>Enter an HTTP(S) URL and optionally select Bookmark or Index. Submit saves your selections and completes the session. Reader saves your selections and opens the entered URL in a new tab.</p></aside>
+    <aside id="form-info" data-info-panel aria-label="About this form" hidden><p>Enter an HTTP(S) URL and optionally select Bookmark, Read or Index. Submit saves your selections and completes the session. Reader saves your selections and opens the entered URL in a new tab.</p></aside>
     <p class="session-label"><code data-session>…</code></p>
     <form id="entry-form" novalidate>
       <fieldset data-fields disabled>
@@ -22,6 +22,7 @@
         </div>
         <div class="choices" role="group" aria-label="URL actions">
           <label for="bookmark"><input id="bookmark" name="bookmark" type="checkbox">Bookmark</label>
+          <label for="read"><input id="read" name="read" type="checkbox">Read</label>
           <label for="index"><input id="index" name="index" type="checkbox">Index</label>
         </div>
         <div class="actions">
