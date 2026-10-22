@@ -62,8 +62,11 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     if actual.get("input") != {"raw_input": value.get("raw_input"), "processed_input": processed}:
         failures.append("Input must preserve raw request and resolved arguments")
     meta = actual.get("meta_data")
-    if not isinstance(meta, dict) or set(meta) != {"requested_url", "final_url"}:
+    if not isinstance(meta, dict) or set(meta) != {"requested_url", "final_url", "date_normalization"}:
         return failures + ["Incorrect meta_data fields"]
+    normalization = meta.get("date_normalization")
+    if not isinstance(normalization, dict):
+        return failures + ["Incorrect date_normalization"]
     if meta.get("requested_url") != value.get("url"):
         failures.append("Metadata requested_url differs from input")
     final = meta.get("final_url")
@@ -85,6 +88,25 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             return failures + [f"Cannot read JSON result: {exc}"]
         if not isinstance(payload, dict) or set(payload) != {"title", "description", "image", "url", "site_name", "type", "section", "keywords", "datePublished", "dateModified", "page_id"}:
             return failures + ["Incorrect saved JSON fields"]
+        from datetime import datetime
+        import sys
+        normalize = sys.modules["project_tool_webpage_og_crawler"]._normalize_date
+        if set(normalization) != {"datePublished", "dateModified"}:
+            failures.append("Missing date normalization diagnostics")
+        for field in ("datePublished", "dateModified"):
+            info = normalization.get(field, {})
+            if set(info) != {"raw_value", "status", "assumptions"}:
+                failures.append(f"Invalid {field} diagnostic fields")
+            elif info["status"] not in {"missing", "invalid", "ambiguous", "preserved", "normalized"} or not isinstance(info["assumptions"], list):
+                failures.append(f"Invalid {field} diagnostic values")
+            elif normalize(info["raw_value"]) != (payload.get(field), info):
+                failures.append(f"{field} does not match its normalization diagnostics")
+            stamp = payload.get(field)
+            if stamp is not None:
+                try:
+                    assert datetime.fromisoformat(stamp.replace("Z", "+00:00")).tzinfo is not None
+                except (ValueError, TypeError, AssertionError):
+                    failures.append(f"{field} must be a timezone-aware ISO timestamp")
     elif actual.get("status") == "error":
         if actual.get("output") is not None:
             failures.append("Error must have null output")
@@ -107,4 +129,11 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             for field, wanted in case["metadata"].items():
                 if parser.metadata[field] != wanted:
                     failures.append(f"Parser case {case['id']}: unexpected {field}")
+    if "normalization_cases" in expected:
+        import sys
+        normalize = sys.modules["project_tool_webpage_og_crawler"]._normalize_date
+        for case in expected["normalization_cases"]:
+            stamp, info = normalize(case["input"])
+            if stamp != case["output"] or info != {"raw_value": case["input"], "status": case["status"], "assumptions": case["assumptions"]}:
+                failures.append(f"Normalization case {case['id']}: unexpected result")
     return failures

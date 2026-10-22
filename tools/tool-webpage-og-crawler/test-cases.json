@@ -842,6 +842,203 @@
     }
   },
   {
+    "case_id": "offline-date-normalization-regressions",
+    "input": {
+      "url": "not-a-url",
+      "raw_input": "Validate date normalization offline"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url",
+      "normalization_cases": [
+        {
+          "id": "natgeo-publication",
+          "input": "10-13-2026",
+          "output": "2026-10-13T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "natgeo-modification",
+          "input": "10-15-2026",
+          "output": "2026-10-15T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "iso-day",
+          "input": "2026-10-13",
+          "output": "2026-10-13T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "day-first",
+          "input": "15/10/2026",
+          "output": "2026-10-15T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "same-month-day",
+          "input": "04-04-2026",
+          "output": "2026-04-04T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "named-month",
+          "input": "October 13, 2026",
+          "output": "2026-10-13T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "named-month-day-first",
+          "input": "13 Oct 2026",
+          "output": "2026-10-13T00:00:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "time_midnight",
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "aware-offset",
+          "input": "2026-10-21T10:30:00+05:30",
+          "output": "2026-10-21T10:30:00+05:30",
+          "status": "preserved",
+          "assumptions": []
+        },
+        {
+          "id": "aware-z-fractions",
+          "input": "2026-10-21T10:30:12.123Z",
+          "output": "2026-10-21T10:30:12.123Z",
+          "status": "preserved",
+          "assumptions": []
+        },
+        {
+          "id": "naive-timestamp",
+          "input": "2026-10-21T10:30:00",
+          "output": "2026-10-21T10:30:00+00:00",
+          "status": "normalized",
+          "assumptions": [
+            "timezone_utc"
+          ]
+        },
+        {
+          "id": "space-timestamp",
+          "input": "2026-10-21 10:30:00+05:30",
+          "output": "2026-10-21T10:30:00+05:30",
+          "status": "normalized",
+          "assumptions": []
+        },
+        {
+          "id": "rfc-date",
+          "input": "Wed, 21 Oct 2026 10:30:00 +0530",
+          "output": "2026-10-21T10:30:00+05:30",
+          "status": "normalized",
+          "assumptions": []
+        },
+        {
+          "id": "ambiguous",
+          "input": "03-04-2026",
+          "output": null,
+          "status": "ambiguous",
+          "assumptions": []
+        },
+        {
+          "id": "bad-day",
+          "input": "02-30-2026",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "bad-leap",
+          "input": "2025-02-29",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "garbage",
+          "input": "P",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "empty",
+          "input": "",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "partial",
+          "input": "2026-10",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "bad-offset",
+          "input": "2026-10-21T10:30:00+25:00",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "unlabelled-zone",
+          "input": "Wed, 21 Oct 2026 10:30:00",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "missing",
+          "input": null,
+          "output": null,
+          "status": "missing",
+          "assumptions": []
+        },
+        {
+          "id": "bad-offset-minutes",
+          "input": "2026-10-21T10:30:00+05:99",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        },
+        {
+          "id": "bad-rfc-offset-minutes",
+          "input": "Wed, 21 Oct 2026 10:30:00 +0599",
+          "output": null,
+          "status": "invalid",
+          "assumptions": []
+        }
+      ]
+    }
+  },
+  {
     "case_id": "article-keywords-and-dates",
     "input": {
       "url": "https://www.thehindu.com/news/cities/chennai/pm-modi-and-tn-cm-vijay-flag-off-chennai-metro-rails-first-train-for-phase-ii-project-take-a-ride-between-porur-poonamallee/article71570925.ece",

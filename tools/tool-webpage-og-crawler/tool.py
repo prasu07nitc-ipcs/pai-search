@@ -38,6 +38,8 @@ import re
 import socket
 import ssl
 import time
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Literal, TypedDict
 from urllib.parse import quote, urldefrag, urljoin, urlsplit
@@ -113,6 +115,59 @@ def _date_field(label: str) -> str | None:
             label = label[len(prefix):]
             break
     return _DATE_FIELDS.get(re.sub(r"[\s:._-]+", "", label))
+
+
+def _normalize_date(value: str | None) -> tuple[str | None, dict]:
+    """Normalize explicit dates without guessing ambiguous numeric order."""
+    info = {"raw_value": value, "status": "missing", "assumptions": []}
+    if value is None:
+        return None, info
+    text = value.strip()
+    info["status"] = "invalid"
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            day = date.fromisoformat(text)
+        elif re.fullmatch(r"\d{1,2}[-/]\d{1,2}[-/]\d{4}", text):
+            first, second, year = map(int, re.split(r"[-/]", text))
+            if 1 <= first <= 12 and 1 <= second <= 12 and first != second:
+                info["status"] = "ambiguous"
+                return None, info
+            month, day_number = (second, first) if first > 12 else (first, second)
+            day = date(year, month, day_number)
+        elif re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?", text):
+            offset = re.search(r"[+-](\d{2}):(\d{2})$", text)
+            if offset and (int(offset[1]) > 23 or int(offset[2]) > 59):
+                return None, info
+            stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if stamp.tzinfo is not None:
+                info["status"] = "preserved" if "T" in text else "normalized"
+                return text if "T" in text else stamp.isoformat(), info
+            info.update(status="normalized", assumptions=["timezone_utc"])
+            return stamp.replace(tzinfo=timezone.utc).isoformat(), info
+        else:
+            day = None
+            for pattern in ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"):
+                try:
+                    day = datetime.strptime(text, pattern).date()
+                    break
+                except ValueError:
+                    pass
+            if day is None:
+                # RFC 2822 timestamps must explicitly provide an offset or UTC/GMT.
+                if not re.search(r"(?:[+-]\d{4}|UTC|GMT)$", text):
+                    return None, info
+                offset = re.search(r"[+-](\d{2})(\d{2})$", text)
+                if offset and (int(offset[1]) > 23 or int(offset[2]) > 59):
+                    return None, info
+                stamp = parsedate_to_datetime(text)
+                if stamp.tzinfo is None:
+                    return None, info
+                info["status"] = "normalized"
+                return stamp.isoformat(), info
+        info.update(status="normalized", assumptions=["time_midnight", "timezone_utc"])
+        return datetime.combine(day, datetime.min.time(), timezone.utc).isoformat(), info
+    except (ValueError, TypeError, OverflowError):
+        return None, info
 
 
 class _Parser(HTMLParser):
@@ -374,7 +429,7 @@ class CrawlResult(TypedDict):
     output_format: str
     status: Literal["ok", "error"]
     error: CrawlError | None
-    meta_data: dict[str, str | None]
+    meta_data: dict
 
 
 def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
@@ -388,7 +443,7 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
     result: CrawlResult = {
         "input": {"raw_input": raw_input, "processed_input": {"url": url}},
         "output": None, "output_format": "json", "status": "error", "error": None,
-        "meta_data": {"requested_url": url, "final_url": None},
+        "meta_data": {"requested_url": url, "final_url": None, "date_normalization": {}},
     }
     payload = _crawl_open_graph(url)
     result["meta_data"]["final_url"] = payload["final_url"]
@@ -397,6 +452,9 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
         return result
     content = {key.split(":", 1)[-1]: item for key, item in payload["open_graph"].items()}
     content.update({key: payload[key] for key in ("keywords", "datePublished", "dateModified")})
+    for field in ("datePublished", "dateModified"):
+        content[field], info = _normalize_date(content[field])
+        result["meta_data"]["date_normalization"][field] = info
     content["page_id"] = hashlib.sha256(content["url"].encode("utf-8")).hexdigest() if content["url"] is not None else None
     try:
         path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n")

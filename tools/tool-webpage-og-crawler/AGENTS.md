@@ -16,7 +16,7 @@ The caller supplies explicit arguments; the tool does not interpret natural lang
 
 Returns exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
 `input` contains `raw_input` and `processed_input`, which contains exactly `url`.
-`meta_data` contains `requested_url` and `final_url`; the latter is the last attempted
+`meta_data` contains `requested_url`, `final_url`, and `date_normalization`; final_url is the last attempted
 URL or null before a request. Blocked redirect destinations are not attempted.
 
 On success, `status` is `ok`, `error` is null, and `output` points to the UTF-8 JSON
@@ -38,11 +38,44 @@ or fallback to the requested or final fetch URL. It is separate from the runner'
 input-based run ID. The validator checks this relationship on every successful test.
 
 Missing metadata is null and does not make a fetch fail. Text values are trimmed
-and HTML entities decoded; relative URLs are preserved. Date strings are preserved
-without date parsing or timezone conversion. Common publisher date conventions
-are supported; creation dates and ambiguous timestamps are not substituted.
+and HTML entities decoded; relative URLs are preserved. Dates are normalized as
+described below. Common publisher date labels are supported; creation dates are
+not substituted.
 Publisher dates are not independently verified. The first supported nonempty value
 in document order wins; malformed structured metadata is ignored.
+
+### Date normalization
+
+Saved `datePublished` and `dateModified` are timezone-aware ISO 8601 timestamps
+or null. Supported values include ISO calendar dates and timestamps, numeric
+month/day/year or day/month/year with hyphens or slashes when order is unambiguous,
+English month-name dates (`October 13, 2026`, `13 Oct 2026`), and RFC 2822 timestamps
+with an explicit numeric offset or UTC/GMT. Numeric dates such as `03-04-2026`
+are ambiguous and become null; equal month/day values are unambiguous.
+Invalid or unsupported values become null without failing the webpage fetch.
+The first extracted nonempty candidate remains authoritative even if invalid;
+normalization does not search for replacement dates.
+
+Existing ISO timestamps with `T` and a timezone retain their original offset,
+fractional seconds, and `Z` representation. Other supported timestamps are
+rendered using ISO 8601. Dates without a time use midnight UTC; timestamps
+without a timezone assume UTC, preserving their clock time. These are explicit
+fallback conventions, not publisher-provided precision or location information.
+
+On successful extraction, `meta_data.date_normalization` has `datePublished` and
+`dateModified` entries, each containing exactly `raw_value` (the extracted string
+or null), `status` (`missing`, `invalid`, `ambiguous`, `preserved`, or `normalized`),
+and `assumptions` (an array containing `time_midnight` and/or `timezone_utc` when
+applied, otherwise empty). Before successful extraction this object is empty.
+Diagnostics remain in the result envelope/log; the saved payload retains its
+existing field set. Downstream consumers requiring provenance must also inspect
+these diagnostics. Existing output files and logs are not migrated.
+
+The read-only validator supports `normalization_cases` for offline normalization
+fixtures in addition to `parser_cases`, `error_code`, `required_properties`,
+`property_values`, `required_metadata`, and `metadata_values`. Run regression
+cases with the existing tools runtime and runner; test records are separate from
+production logs.
 
 The tool does not render JavaScript, fetch images, infer article content, or guess
 missing metadata. Output files from different run IDs are retained; the same run
