@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
     failures = []
-    if actual["input"] != {"raw_input": value["raw_input"], "processed_input": {"page": value["page"]}}:
+    if actual["input"] != {"raw_input": value["raw_input"], "processed_input": {"page_file": value["page_file"]}}:
         failures.append("Input was not preserved.")
     if actual["output_format"] != "markdown":
         failures.append("Expected Markdown output format.")
@@ -18,15 +18,16 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
         if "error_code" in expected and actual["error"]["code"] != expected["error_code"]:
             failures.append("Unexpected error code.")
         return failures
-    page = value["page"]
+    source = Path(os.environ["PROJECT_TRANSACTION_INPUT_ROOT"]) / value["page_file"]
+    page = json.loads(source.read_text(encoding="utf-8"))
     domain = urlsplit(page["url"]).hostname.encode("idna").decode("ascii").lower().rstrip(".")
     path = f"data/bookmark/{domain.replace('.', '_')}/{page['page_id']}.md"
-    if actual["output"] != path:
+    if actual["output"] != [path]:
         return failures + ["Incorrect domain/page output path."]
     if actual["meta_data"] != {"domain": domain, "page_id": page["page_id"]}:
         failures.append("Incorrect metadata.")
     for key in ("output", "domain"):
-        found = actual["output"] if key == "output" else domain
+        found = actual["output"][0] if key == "output" else domain
         if key in expected and found != expected[key]:
             failures.append(f"Unexpected {key}.")
     target = Path(os.environ["PROJECT_TRANSACTION_DATA_DIRECTORY"]) / domain.replace(".", "_") / (page["page_id"] + ".md")
@@ -48,6 +49,8 @@ def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
             signature_lines.append("- Local changes: None")
         if not content.endswith("\n".join(signature_lines) + "\n"):
             failures.append("Source signature does not match runner snapshot.")
+        if "## Image" in content:
+            failures.append("Image section must not be rendered.")
         if "## Original data" in content:
             failures.append("Original data section must not be rendered.")
         for text in expected.get("contains", []):

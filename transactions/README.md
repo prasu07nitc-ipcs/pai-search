@@ -1,100 +1,74 @@
 # Transactions
 
-Transactions manage persistent project data under `data/`. Read the [sub-project policy](AGENTS.md) before creating or changing a transaction.
+Run explicitly authorized persistent changes through the dedicated macOS Python
+3.11+ environment. Commands run from the repository root, regardless of the
+chat's current context. The runner uses only the standard library and installs a
+fail-closed OS sandbox before importing a worker.
 
-The macOS transaction runner executes transactions in the dedicated Python 3.11+ `transactions/.venv`. Each worker can write only its own `data/<transaction_name>/` subtree; the runner owns logs. The runtime uses only the standard library and was created separately with user authorization.
-
-**Strict runner dependency rule:** `runner.py` must use only Python built-ins and the standard library, including for optional or delegated runner functionality. Third-party Python libraries are prohibited. See the [full dependency policy](AGENTS.md#strict-runner-dependencies).
-
-## Structure
-
-Paths below are relative to the repository root:
-
-```text
-transactions/
-  AGENTS.md
-  README.md
-  tx-bookmark/
-    TRANSACTION.md
-    AGENTS.md
-    transaction.py
-    validator.py
-    test-cases.json
-data/
-  AGENTS.md
-```
-
-An implemented transaction will live in `transactions/tx-<transaction_name>/` with `TRANSACTION.md`, `AGENTS.md`, `transaction.py`, and `validator.py`. Its execution logs will live in its local logs/ directory. Use the runner commands below; do not invoke transaction modules directly.
-
-Transaction-specific data folders are created and validated by the runner only at runtime for an authorized invocation. Scaffolding and discovery do not create them.
-
-## Agreed output model
-
-Each transaction exclusively owns the data subdirectory derived from its name: `tx-bookmark` owns `data/bookmark/`, and `tx-index` owns `data/index/`. The bookmark destination is:
-
-```text
-data/bookmark/www_thehindu_com/<page_id>.md
-```
-
-The standard six-field result envelope is retained, but transaction output paths are relative to the repository root and point directly to persistent data. For example, these fields appear in a successful result:
-
-```json
-{
-  "output": "data/bookmark/www_thehindu_com/<page_id>.md",
-  "output_format": "markdown",
-  "status": "ok",
-  "error": null
-}
-```
-
-The example is an excerpt, not the complete result envelope. Production logs copy that output path directly. No separate receipt is necessary. Replacing a file changes the contents reached by earlier log entries; file versioning is not provided.
-
-## Access model
-
-Transactions alone may write shared data among framework workers. Each transaction can write only its own `data/<transaction_name>/` subtree. Other transactions cannot write there, and transaction definitions cannot override the naming convention. The parent runner writes transaction-local logs; workers cannot write their local implementation or logs. Tools keep their existing local write permissions. Transaction tests must use isolated disposable data, not production bookmarks. The runner installs and probes the macOS filesystem/subprocess sandbox before importing transaction code, and fails closed when unavailable.
-
-## Available transaction definitions
-
-[tx-bookmark](tx-bookmark/TRANSACTION.md) formats supplied webpage metadata as Markdown without an Original data section. data/bookmark/ is created only at runtime for a production invocation. Tests use disposable isolated data roots.
-
-## Execution
-
-All commands run from the repository root. --input is a JSON object of named arguments, including raw_input. Use --transaction to select a tx-<name> definition.
+## Run
 
 ```sh
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --input '{"raw_input":"Bookmark example","page":{"title":"Example","description":"Example page","url":"https://example.com/a","page_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
-
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --cases transactions/tx-bookmark/test-cases.json --summary
-
-transactions/.venv/bin/python -B transactions/test_runner.py
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --input '{"raw_input":"Index saved contexts","page_file":"tools/tool-webpage-og-crawler/output/<run_id>.txt","context_file":"skills/skill-context-encoder/output/<run_id>.txt"}'
 ```
 
-The runner uses a 20-second worker timeout; --timeout accepts a positive finite number up to 300 seconds. Successful duplicate production inputs require explicit confirmation through --rerun. Noninteractive duplicates exit 2. Test failures exit 1; --summary reports counts while full case records remain in logs/test-report.log.
+| Transaction | Inputs besides `raw_input` | Owned destination |
+| --- | --- | --- |
+| [tx-bookmark](tx-bookmark/AGENTS.md) | `page_file` | `data/bookmark/<domain>/<page_id>.md` |
+| [tx-publish-article](tx-publish-article/AGENTS.md) | `page_id_file`, `article_file` | `data/articles/<domain>/<page_id>.md` |
+| [tx-index](tx-index/AGENTS.md) | `page_file`, `context_file` | `data/index/<exact entity_name>/<domain>/<page_id>.md` |
 
-Production stdout is the six-field result object. API callers may use invoke(name, value, test_run=False, expected=None, timeout=20, run_id=None, rerun=False) under the authorized runtime. Test execution prepares and removes an isolated data destination for every case, never production data. Test output paths remain logical repository-relative paths; physical test artifacts are removed after validation.
+Producer run IDs are 64 lowercase hexadecimal characters. See the linked
+transaction contracts for allowed source folders, validation, and replacement rules.
 
-Logs live under transactions/tx-<name>/logs/: run.log for production, test-report.log for cases and runner.log for function diagnostics and timings. See the [logging contract](AGENTS.md#logging-and-execution-requirements). Direct API users should configure runner.LOGGER for runner-owned diagnostics as the CLI does.
+Stdout is one compact JSON object with `input`, `output`, `output_format`, `status`,
+`error`, and `meta_data`. Success returns an array of repository-relative files;
+failure returns null output. Diagnostics go to transaction-local `logs/runner.log`.
+Production records append to `logs/run.log`; case records to `logs/test-report.log`.
+Avoid reading logs or source payloads during routine discovery.
 
-No automatic rollback or file versioning is provided. A worker may finish a write before a timeout or result-validation failure; retry and recovery must account for that possibility. Logs are operational records, not tamper-proof audits. The internal --worker mode is runner transport, not a public alternate execution interface.
+`--timeout` bounds the worker (default 20 seconds; maximum 300). Index lock waiting
+has a separate bound of the same length. An identical successful request exits 2
+noninteractively; use `--rerun` only after explicit user confirmation.
 
-## Source Code Signature
+## Verify
 
-Bookmark Markdown ends with `## Source Code Signature`, containing Git repository URL,
-Git branch, full Git commit SHA, and Local changes. The parent runner captures this
-snapshot immediately before launching the worker and supplies it through runner-owned
-`PROJECT_TRANSACTION_SOURCE_SIGNATURE` JSON configuration, never caller arguments.
-The repository is resolved from the selected transaction directory. The origin URL is
-converted from SSH to HTTPS where possible and stripped of credentials, query, fragment,
-and trailing .git. No repository-name field is included. Missing remote URLs use
-`Unavailable`; detached branches use `Detached HEAD`. Outside Git all Git fields use
-`Unavailable`. Git repositories without a resolvable HEAD or with failed snapshot commands
-fail execution rather than falsely report a clean snapshot.
+```sh
+transactions/.venv/bin/python -B transactions/test_runner.py
+transactions/.venv/bin/python -B transactions/test_index.py
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --cases transactions/tx-bookmark/test-cases.json --summary
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article --cases transactions/tx-publish-article/test-cases.json --summary
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --cases transactions/tx-index/test-cases.json --summary
+```
 
-Local changes include only the selected transaction directory, staged, unstaged, and
-untracked files, excluding Git-ignored files (including tracked files matching current
-ignore rules). Paths are repository-relative; entries retain Git porcelain two-column
-status codes (index then working tree; `.` represents an unchanged column; `??` means untracked). Renames appear as deletion
-and addition. Empty changes render `- Local changes: None`. Changes elsewhere, including
-the shared runner, are excluded. This snapshot lists paths and statuses, not file contents
-or diffs, and does not guarantee an atomic snapshot against concurrent source edits.
-The public six-field result, inputs, metadata, and output path remain unchanged.
+Tests use disposable data and producer-shaped fixtures; they never use production
+data. The host must allow the tests to install their own macOS sandbox. `--summary`
+keeps terminal output small while retaining complete case records.
+
+## Reproducibility and recovery
+
+Production request identity is SHA-256 of canonical UTF-8 JSON: sorted keys,
+compact separators, literal Unicode, no non-finite numbers. Original arguments,
+including `raw_input`, participate; defaults do not. This is request identity,
+not a fingerprint of implementation or source payloads.
+
+Test records fingerprint the runner, implementation, validator, exact case file,
+and fixture mapping, and record Python version and platform. Hashes identify
+inputs; retain the corresponding source files and runtime to replay them.
+Suite source hashes are captured once before cases run: do not edit sources
+while a suite is running.
+
+Index replacement batches additionally hash both source byte streams, verify
+worker reads, and journal their original Asia/Kolkata timestamp under an exclusive
+lock. Failed or interrupted batches reuse that timestamp when recovered. Files
+are replaced atomically one at a time; there is no batch rollback. Old index
+layouts and removed entities are not automatically migrated or deleted.
+
+Byte-for-byte replay across arbitrary runs is not guaranteed: timestamps, Git
+snapshot metadata, runtime/timezone data, and source changes can affect output.
+Every transaction output ends with a Source Code Signature describing the selected
+transaction's Git state, not a complete
+content archive. Preserve these dependencies when comparing artifacts.
+
+[AGENTS.md](AGENTS.md) defines framework policy; transaction-local instructions
+contain the payload contracts. Runtime/dependency changes require separate
+authorization. Do not invoke transaction modules or internal worker mode directly.

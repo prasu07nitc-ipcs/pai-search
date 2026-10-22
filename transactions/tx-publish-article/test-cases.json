@@ -1,0 +1,546 @@
+[
+  {
+    "case_id": "valid",
+    "input": {
+      "raw_input": "Test article valid",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/9ad37e21153c81ae606003129a7b3edb75427ef62d45ff8f2de5bed776e0ed55.txt",
+      "article_file": "skills/skill-article-writer/output/13951099922dc60a0625dba756548705a5775da9d9977397ab9fad5e91e2100e.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com/story"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/9ad37e21153c81ae606003129a7b3edb75427ef62d45ff8f2de5bed776e0ed55.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/13951099922dc60a0625dba756548705a5775da9d9977397ab9fad5e91e2100e.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "mismatch",
+    "input": {
+      "raw_input": "Test article mismatch",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt",
+      "article_file": "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "page_id_mismatch"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt": "eyJwYWdlX2lkIjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifQ==",
+      "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "invalid-id",
+    "input": {
+      "raw_input": "Test article invalid-id",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/0f298b4bbf45fa9a07b1f524b9f81814ab67224cd15b0dfe47fb0249000af5f9.txt",
+      "article_file": "skills/skill-article-writer/output/ccb463306e9732a5421790b39489d665cc0f62362900642ff7a36f5f5283e86c.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/0f298b4bbf45fa9a07b1f524b9f81814ab67224cd15b0dfe47fb0249000af5f9.txt": "eyJwYWdlX2lkIjogIi4uL2VzY2FwZSJ9",
+      "skills/skill-article-writer/output/ccb463306e9732a5421790b39489d665cc0f62362900642ff7a36f5f5283e86c.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "uppercase-id",
+    "input": {
+      "raw_input": "Test article uppercase-id",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/96a73c59b543d509b1d004fcde77bf878e105991413f0a6cf4b4bd2b6690c5ea.txt",
+      "article_file": "skills/skill-article-writer/output/34adcb774951f74a9db1f99415491d04fe351e379cffab6445de161e56c3b47d.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/96a73c59b543d509b1d004fcde77bf878e105991413f0a6cf4b4bd2b6690c5ea.txt": "eyJwYWdlX2lkIjogIkFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUEifQ==",
+      "skills/skill-article-writer/output/34adcb774951f74a9db1f99415491d04fe351e379cffab6445de161e56c3b47d.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "empty",
+    "input": {
+      "raw_input": "Test article empty",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/9cc3896bac15e664158d78ee5481f9623eaefea96fd32075692040c22cbabfbe.txt",
+      "article_file": "skills/skill-article-writer/output/24c6b71638370f1d3da5bb3cd7957dea0d2b286eda3744afa2f15ea21cb482d4.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_article"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/9cc3896bac15e664158d78ee5481f9623eaefea96fd32075692040c22cbabfbe.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/24c6b71638370f1d3da5bb3cd7957dea0d2b286eda3744afa2f15ea21cb482d4.txt": ""
+    }
+  },
+  {
+    "case_id": "unlinked-title",
+    "input": {
+      "raw_input": "Test article unlinked-title",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/faf82484c24fb7675a3f90088f8697a59615fafc4f1929c31d7d7d0e983d14cf.txt",
+      "article_file": "skills/skill-article-writer/output/b145f5395ed7f21447bc3661a30856f684763bb1179752841c06faa923d31ec3.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_article"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/faf82484c24fb7675a3f90088f8697a59615fafc4f1929c31d7d7d0e983d14cf.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/b145f5395ed7f21447bc3661a30856f684763bb1179752841c06faa923d31ec3.txt": "IyBUaXRsZQoKQXJ0aWNsZS4="
+    }
+  },
+  {
+    "case_id": "reference-title",
+    "input": {
+      "raw_input": "Test article reference-title",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/a561a60823da26845b7a9ed80e2c9d58d8eb9034532068bbd13ee0a8d6c3c3f8.txt",
+      "article_file": "skills/skill-article-writer/output/3068e0f1e250abbbfa7ddb083d22f9418a7c96102936ce6e56f424f966b94b0b.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_article"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/a561a60823da26845b7a9ed80e2c9d58d8eb9034532068bbd13ee0a8d6c3c3f8.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/3068e0f1e250abbbfa7ddb083d22f9418a7c96102936ce6e56f424f966b94b0b.txt": "IyBbVGl0bGVdW3NvdXJjZV0KCkFydGljbGUuCltzb3VyY2VdOiBodHRwczovL2V4YW1wbGUuY29tL3N0b3J5"
+    }
+  },
+  {
+    "case_id": "unclosed-link",
+    "input": {
+      "raw_input": "Test article unclosed-link",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/790661be81b7f093e68202f96e9e74d091632dfc890eeb3e549084cc95585b81.txt",
+      "article_file": "skills/skill-article-writer/output/d0fede02eccfeec849e77252f0c13e2708c5cbac5eb1f34b1c6de22a6c8a93b9.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_article"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/790661be81b7f093e68202f96e9e74d091632dfc890eeb3e549084cc95585b81.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/d0fede02eccfeec849e77252f0c13e2708c5cbac5eb1f34b1c6de22a6c8a93b9.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkKCkFydGljbGUu"
+    }
+  },
+  {
+    "case_id": "no-body",
+    "input": {
+      "raw_input": "Test article no-body",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/6ceba528e946b8cf523a40bf7788446705b3c4df63a6d33199098a584824a50b.txt",
+      "article_file": "skills/skill-article-writer/output/0f4217618398f0b8ffe4be2efac7fc73fd6a3da88a42f8a59719a93e7c3e74c4.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_article"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/6ceba528e946b8cf523a40bf7788446705b3c4df63a6d33199098a584824a50b.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/0f4217618398f0b8ffe4be2efac7fc73fd6a3da88a42f8a59719a93e7c3e74c4.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3Rvcnkp"
+    }
+  },
+  {
+    "case_id": "invalid-url",
+    "input": {
+      "raw_input": "Test article invalid-url",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/163dba02b33980490f1bc292b1d137ec955762aa3e605bbe4c50be1489e61b77.txt",
+      "article_file": "skills/skill-article-writer/output/0add03436c57fea1b3c607d08e5ddaf980c46c2c10d3cb9eaf8b8b69ef16363f.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/163dba02b33980490f1bc292b1d137ec955762aa3e605bbe4c50be1489e61b77.txt": "eyJwYWdlX2lkIjogIjBlN2E1YTVjMTBjYmU4OGFjMmQ0ZThmMzI5ODFmMGI5MjcxOTQ0YjlkYjc0YmM3Y2Q1MDJiOWY3MmMwNGY4ODAifQ==",
+      "skills/skill-article-writer/output/0add03436c57fea1b3c607d08e5ddaf980c46c2c10d3cb9eaf8b8b69ef16363f.txt": "IyBbVGl0bGVdKGZpbGU6Ly8vZXRjL3Bhc3N3ZCkKKlVwZGF0ZWQ6IDIwMjYtMTAtMjJUMDU6NDk6MDArMDU6MzAqCgpBcnRpY2xlIHRleHQgd2l0aCBbc291cmNlXShodHRwczovL2V4YW1wbGUub3JnLykuCgojIyBTb3VyY2VzCgotIFNvdXJjZQoKLS0tCgoqKipFeGFtcGxlLCBTdG9yeSoqKgoKKlB1Ymxpc2hlZDogMjIgT2N0b2JlciAyMDI2Kgo="
+    }
+  },
+  {
+    "case_id": "credentials",
+    "input": {
+      "raw_input": "Test article credentials",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/f5b8d6a5f0f92663b6706a4818c962250f0ed33f69103c84185f15b14c9c3ae8.txt",
+      "article_file": "skills/skill-article-writer/output/4470c0b6f075ed9347d694a706ca65b4dfd995b9bc4323d73db1fbfba49f4f88.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/f5b8d6a5f0f92663b6706a4818c962250f0ed33f69103c84185f15b14c9c3ae8.txt": "eyJwYWdlX2lkIjogImI3MDE3ZTJiYTU2MjUzMWM1Y2YxOWM0MThlOGEyN2Q3YTA5Yzc3ZGY3MmVlYWY5MjIxMjkwYTU2OWNlMjc4YTUifQ==",
+      "skills/skill-article-writer/output/4470c0b6f075ed9347d694a706ca65b4dfd995b9bc4323d73db1fbfba49f4f88.txt": "IyBbVGl0bGVdKGh0dHBzOi8vdXNlcjpwYXNzd29yZEBleGFtcGxlLmNvbS9zdG9yeSkKKlVwZGF0ZWQ6IDIwMjYtMTAtMjJUMDU6NDk6MDArMDU6MzAqCgpBcnRpY2xlIHRleHQgd2l0aCBbc291cmNlXShodHRwczovL2V4YW1wbGUub3JnLykuCgojIyBTb3VyY2VzCgotIFNvdXJjZQoKLS0tCgoqKipFeGFtcGxlLCBTdG9yeSoqKgoKKlB1Ymxpc2hlZDogMjIgT2N0b2JlciAyMDI2Kgo="
+    }
+  },
+  {
+    "case_id": "whitespace",
+    "input": {
+      "raw_input": "Test article whitespace",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/21779c1b30ea7806d9d428c9f4f3a29fa1b3ae8b2df1e9d826c2ae902033c69a.txt",
+      "article_file": "skills/skill-article-writer/output/f23749be9a42cc069984aa0622521c12c70b64c7d91b42925563f1ff6b2b5794.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/21779c1b30ea7806d9d428c9f4f3a29fa1b3ae8b2df1e9d826c2ae902033c69a.txt": "eyJwYWdlX2lkIjogIjNkYjBjMTVmNjZlODdmYjk4ZWRjNDkzOThlZGYzYTc1NThlZjdmZWIzODYwZjIyNjMzNDdjMTg0NTA5MGIzMTIifQ==",
+      "skills/skill-article-writer/output/f23749be9a42cc069984aa0622521c12c70b64c7d91b42925563f1ff6b2b5794.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vYSBiKQoqVXBkYXRlZDogMjAyNi0xMC0yMlQwNTo0OTowMCswNTozMCoKCkFydGljbGUgdGV4dCB3aXRoIFtzb3VyY2VdKGh0dHBzOi8vZXhhbXBsZS5vcmcvKS4KCiMjIFNvdXJjZXMKCi0gU291cmNlCgotLS0KCioqKkV4YW1wbGUsIFN0b3J5KioqCgoqUHVibGlzaGVkOiAyMiBPY3RvYmVyIDIwMjYqCg=="
+    }
+  },
+  {
+    "case_id": "nested-parentheses",
+    "input": {
+      "raw_input": "Test article nested-parentheses",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/96c5b10ac9ceeb1a4e3d52bb865ea6582cf50e751db9daccae0ef66fb26773f3.txt",
+      "article_file": "skills/skill-article-writer/output/65736f73350526ddcebca94cf6ef3afeb2e51919a409b9eb6f1b476ead6b8140.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com/a_(story)"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/96c5b10ac9ceeb1a4e3d52bb865ea6582cf50e751db9daccae0ef66fb26773f3.txt": "eyJwYWdlX2lkIjogIjY3NDkxYjQ1Njc2OGRjNjRmMzQ1YjEwNDIyZmY0YWRiMTcyMDk1YWQxZDNkZmQ2NmJlOGZkMWI4NTNjODUwNTcifQ==",
+      "skills/skill-article-writer/output/65736f73350526ddcebca94cf6ef3afeb2e51919a409b9eb6f1b476ead6b8140.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vYV8oc3RvcnkpKQoqVXBkYXRlZDogMjAyNi0xMC0yMlQwNTo0OTowMCswNTozMCoKCkFydGljbGUgdGV4dCB3aXRoIFtzb3VyY2VdKGh0dHBzOi8vZXhhbXBsZS5vcmcvKS4KCiMjIFNvdXJjZXMKCi0gU291cmNlCgotLS0KCioqKkV4YW1wbGUsIFN0b3J5KioqCgoqUHVibGlzaGVkOiAyMiBPY3RvYmVyIDIwMjYqCg=="
+    }
+  },
+  {
+    "case_id": "angle-url",
+    "input": {
+      "raw_input": "Test article angle-url",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/b8194ae3f95fc6e3f7642757c16592a5fb09e08d0f56487be5e537ae30ec4029.txt",
+      "article_file": "skills/skill-article-writer/output/cbffa87602dc78f4ddb39a833ae2e4ce9518196a5d89d3fb80f5c488dd029f3a.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com/story"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/b8194ae3f95fc6e3f7642757c16592a5fb09e08d0f56487be5e537ae30ec4029.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/cbffa87602dc78f4ddb39a833ae2e4ce9518196a5d89d3fb80f5c488dd029f3a.txt": "IyBbVGl0bGVdKDxodHRwczovL2V4YW1wbGUuY29tL3N0b3J5PikKCkFydGljbGUu"
+    }
+  },
+  {
+    "case_id": "escaped-url",
+    "input": {
+      "raw_input": "Test article escaped-url",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/d11f75929c022e024f06c021eb7a0aa7d383b02e7d21f8fd7f9a9b4a643e320b.txt",
+      "article_file": "skills/skill-article-writer/output/2568876775ccd58cf5cc7d926090704b2ac8715fa4dcb864c4b8d2586996336c.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com/a_(story)"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/d11f75929c022e024f06c021eb7a0aa7d383b02e7d21f8fd7f9a9b4a643e320b.txt": "eyJwYWdlX2lkIjogIjY3NDkxYjQ1Njc2OGRjNjRmMzQ1YjEwNDIyZmY0YWRiMTcyMDk1YWQxZDNkZmQ2NmJlOGZkMWI4NTNjODUwNTcifQ==",
+      "skills/skill-article-writer/output/2568876775ccd58cf5cc7d926090704b2ac8715fa4dcb864c4b8d2586996336c.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vYV9cKHN0b3J5XCkpCgpBcnRpY2xlLg=="
+    }
+  },
+  {
+    "case_id": "exact-url",
+    "input": {
+      "raw_input": "Test article exact-url",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/0517014a03ae96024fdce2d2cfd245376199101d19d19e29a8be6f73cbec4e03.txt",
+      "article_file": "skills/skill-article-writer/output/8f295a625cd567e0d1e4a129d12b659b873c01632bac08293d95444aacf84fe6.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://EXAMPLE.com/story?b=2&a=1#part"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/0517014a03ae96024fdce2d2cfd245376199101d19d19e29a8be6f73cbec4e03.txt": "eyJwYWdlX2lkIjogIjk4YWU2MDA3M2JlZTcyMzNkY2E3MDE0NGRlOGNlZWZhNzlkM2QzZTA3ZGIyZTUyNDZmYTMwZTBhOGI2ODY1MTEifQ==",
+      "skills/skill-article-writer/output/8f295a625cd567e0d1e4a129d12b659b873c01632bac08293d95444aacf84fe6.txt": "IyBbVGl0bGVdKGh0dHBzOi8vRVhBTVBMRS5jb20vc3Rvcnk/Yj0yJmE9MSNwYXJ0KQoqVXBkYXRlZDogMjAyNi0xMC0yMlQwNTo0OTowMCswNTozMCoKCkFydGljbGUgdGV4dCB3aXRoIFtzb3VyY2VdKGh0dHBzOi8vZXhhbXBsZS5vcmcvKS4KCiMjIFNvdXJjZXMKCi0gU291cmNlCgotLS0KCioqKkV4YW1wbGUsIFN0b3J5KioqCgoqUHVibGlzaGVkOiAyMiBPY3RvYmVyIDIwMjYqCg=="
+    }
+  },
+  {
+    "case_id": "normalization-mismatch",
+    "input": {
+      "raw_input": "Test article normalization-mismatch",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/5837f4ebbcd8be8c198f4772bdf19f556dc25b789549fed83d261ea7b130cde8.txt",
+      "article_file": "skills/skill-article-writer/output/5beb10bd954017031a31c4e9a755973ac30556e57639eed2b7d8040cd0081a11.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "page_id_mismatch"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/5837f4ebbcd8be8c198f4772bdf19f556dc25b789549fed83d261ea7b130cde8.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/5beb10bd954017031a31c4e9a755973ac30556e57639eed2b7d8040cd0081a11.txt": "IyBbVGl0bGVdKGh0dHBzOi8vRVhBTVBMRS5jb20vc3RvcnkpCgpBcnRpY2xlLg=="
+    }
+  },
+  {
+    "case_id": "existing-label",
+    "input": {
+      "raw_input": "Test article existing-label",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/3d21b2a57159612eca63789d3a1c88c0232c9664ea91ff3c4242b290333dfdc8.txt",
+      "article_file": "skills/skill-article-writer/output/bd3ffe0323fa10ddb532d3b3ec3c03093185971d4dc3b52a23390424c99bd3e4.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com/story"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/3d21b2a57159612eca63789d3a1c88c0232c9664ea91ff3c4242b290333dfdc8.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/bd3ffe0323fa10ddb532d3b3ec3c03093185971d4dc3b52a23390424c99bd3e4.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpDQoNCkFydGljbGUuDQoqUHVibGlzaGVkOiAyMiBPY3RvYmVyIDIwMjYqDQpTb3VyY2UgUGFnZSBJZDogYWIxMTZjMTVkOGFjOGI1Mjg1ZTBhOGM3MGJlMGJmMDNhZDU1ZjhjYTYzY2JmZTA5MDMxNDIzODFkZWM4MjY4ZA0K"
+    }
+  },
+  {
+    "case_id": "conflicting-label",
+    "input": {
+      "raw_input": "Test article conflicting-label",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/f62fafaa99f36f8535fdec45c128bf9d11bbbce94fa0299eb320d89527f445dc.txt",
+      "article_file": "skills/skill-article-writer/output/e5240948cea4f3868602e5ea8e25070a97c19e84a5ab51c31eab5b80ef0cc902.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "page_id_mismatch"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/f62fafaa99f36f8535fdec45c128bf9d11bbbce94fa0299eb320d89527f445dc.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ==",
+      "skills/skill-article-writer/output/e5240948cea4f3868602e5ea8e25070a97c19e84a5ab51c31eab5b80ef0cc902.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCgpBcnRpY2xlLgpTb3VyY2UgUGFnZSBJRDogYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYg=="
+    }
+  },
+  {
+    "case_id": "www-port",
+    "input": {
+      "raw_input": "Test article www-port",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/fd856c9dc8af0c7a2a80457283deac3173517ba7c29fbdb7418bd817f1f841a7.txt",
+      "article_file": "skills/skill-article-writer/output/b1e48b0235d568762a7b5292edc8a9e0403537ac31fca6c5a9cc4574f23402e5.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://WWW.Example.COM:8443/story",
+      "output": "data/articles/www_example_com/59db9cfa99a6be2463d1d201f78babb06572bd70769415ea0824dbc5df9b959f.md"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/fd856c9dc8af0c7a2a80457283deac3173517ba7c29fbdb7418bd817f1f841a7.txt": "eyJwYWdlX2lkIjogIjU5ZGI5Y2ZhOTlhNmJlMjQ2M2QxZDIwMWY3OGJhYmIwNjU3MmJkNzA3Njk0MTVlYTA4MjRkYmM1ZGY5Yjk1OWYifQ==",
+      "skills/skill-article-writer/output/b1e48b0235d568762a7b5292edc8a9e0403537ac31fca6c5a9cc4574f23402e5.txt": "IyBbVGl0bGVdKGh0dHBzOi8vV1dXLkV4YW1wbGUuQ09NOjg0NDMvc3RvcnkpCgpBcnRpY2xlIHRleHQu"
+    }
+  },
+  {
+    "case_id": "trailing-dot",
+    "input": {
+      "raw_input": "Test article trailing-dot",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/02968ceb7cc639908d67714eca0d6817ae5472541284838dcf5de9fa3d2242f5.txt",
+      "article_file": "skills/skill-article-writer/output/a66bddb36ecb0e0654da931f994f68eeaf231d7fd2e15cdef483670a32cd91ba.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://example.com./story",
+      "output": "data/articles/example_com/fe99fadf51bc0c2336c33772dd2366e4967523e724fa7614340d6175c86a7415.md"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/02968ceb7cc639908d67714eca0d6817ae5472541284838dcf5de9fa3d2242f5.txt": "eyJwYWdlX2lkIjogImZlOTlmYWRmNTFiYzBjMjMzNmMzMzc3MmRkMjM2NmU0OTY3NTIzZTcyNGZhNzYxNDM0MGQ2MTc1Yzg2YTc0MTUifQ==",
+      "skills/skill-article-writer/output/a66bddb36ecb0e0654da931f994f68eeaf231d7fd2e15cdef483670a32cd91ba.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20uL3N0b3J5KQoKQXJ0aWNsZSB0ZXh0Lg=="
+    }
+  },
+  {
+    "case_id": "idna",
+    "input": {
+      "raw_input": "Test article idna",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/a9a33efe5b0e464ef42d25fb430c4d0e4a0dbd374d89e8c20024b3d8a2497462.txt",
+      "article_file": "skills/skill-article-writer/output/d960019af4cd13ad5d1b9eb0b6b02c46a36acc30af39a73c24a844569b8db0a8.txt"
+    },
+    "expected": {
+      "status": "ok",
+      "url": "https://bücher.example/story",
+      "output": "data/articles/xn--bcher-kva_example/7661f6111ce2c1bfb808bc8e3abbd34f14d87cef6dd10e22907424f9feb6e990.md"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/a9a33efe5b0e464ef42d25fb430c4d0e4a0dbd374d89e8c20024b3d8a2497462.txt": "eyJwYWdlX2lkIjogIjc2NjFmNjExMWNlMmMxYmZiODA4YmM4ZTNhYmJkMzRmMTRkODdjZWY2ZGQxMGUyMjkwNzQyNGY5ZmViNmU5OTAifQ==",
+      "skills/skill-article-writer/output/d960019af4cd13ad5d1b9eb0b6b02c46a36acc30af39a73c24a844569b8db0a8.txt": "IyBbVGl0bGVdKGh0dHBzOi8vYsO8Y2hlci5leGFtcGxlL3N0b3J5KQoKQXJ0aWNsZSB0ZXh0Lg=="
+    }
+  },
+  {
+    "case_id": "unsafe-host",
+    "input": {
+      "raw_input": "Test article unsafe-host",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/8eca40f67bdacf2a11893703071c05c8ffe22aea48408747b3677684624593c8.txt",
+      "article_file": "skills/skill-article-writer/output/4b0d04c4539ec645a9f01ab36b07a0edc4bde1782364f6bef7920c064e4b8c25.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/8eca40f67bdacf2a11893703071c05c8ffe22aea48408747b3677684624593c8.txt": "eyJwYWdlX2lkIjogImFjNzZjOTdiZDIyZmE4MmJjM2JkYTllYjlhNWI5ZWQ3YmMwMjRiZGVhNjcxN2FkNWVhMDJiNzgzNjdiY2JiNGMifQ==",
+      "skills/skill-article-writer/output/4b0d04c4539ec645a9f01ab36b07a0edc4bde1782364f6bef7920c064e4b8c25.txt": "IyBbVGl0bGVdKGh0dHBzOi8vLi4vc3RvcnkpCgpBcnRpY2xlIHRleHQu"
+    }
+  },
+  {
+    "case_id": "invalid-host",
+    "input": {
+      "raw_input": "Test article invalid-host",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/426319216735ac6ee104db6ff22ff706d11971c6605d4dcdd7e38443ab505206.txt",
+      "article_file": "skills/skill-article-writer/output/1c85b38acd2777fa6fed50f0904b7e62a903cb19e01abcffca4880a4d340b887.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/426319216735ac6ee104db6ff22ff706d11971c6605d4dcdd7e38443ab505206.txt": "eyJwYWdlX2lkIjogIjUzMzFlN2FjZjk1MDFkMjUxZmQyOGE4YThmMGRkYzA3M2E2ZGI3YTkyZDBiODgyNzU2MjEyYjlhZTg5ZTY5MDcifQ==",
+      "skills/skill-article-writer/output/1c85b38acd2777fa6fed50f0904b7e62a903cb19e01abcffca4880a4d340b887.txt": "IyBbVGl0bGVdKGh0dHBzOi8vYmFkX2hvc3QuZXhhbXBsZS9zdG9yeSkKCkFydGljbGUgdGV4dC4="
+    }
+  },
+  {
+    "case_id": "ipv6-host",
+    "input": {
+      "raw_input": "Test article ipv6-host",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/65f75db724850ed8c96646731074e4f773580b21c661455ccdf3fd68b5f42cf6.txt",
+      "article_file": "skills/skill-article-writer/output/8cd44ee9dfddee845e22f7063d9852d868257f0f78879c5660b9632f6e2a9798.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/65f75db724850ed8c96646731074e4f773580b21c661455ccdf3fd68b5f42cf6.txt": "eyJwYWdlX2lkIjogIjkyOTQ5OGYyMTIxNjNhNmY4YmUxMGQyY2ZiZDBhYjhjMjA0YzZjNmE4Yjg3NjU0NmJjM2EyMTBiNDU5MTE3MjEifQ==",
+      "skills/skill-article-writer/output/8cd44ee9dfddee845e22f7063d9852d868257f0f78879c5660b9632f6e2a9798.txt": "IyBbVGl0bGVdKGh0dHBzOi8vWzo6MV0vc3RvcnkpCgpBcnRpY2xlIHRleHQu"
+    }
+  },
+  {
+    "case_id": "malformed-json",
+    "input": {
+      "raw_input": "malformed-json",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/f44a80205c90b6b4225173ddc084862a39dce211f59ccbebbecd3caa6ebe8071.txt",
+      "article_file": "skills/skill-article-writer/output/216bf22d7ef4987ffefd7260769c9963d263b1203000ceb6f70a59758d26c32d.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_json"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/f44a80205c90b6b4225173ddc084862a39dce211f59ccbebbecd3caa6ebe8071.txt": "ew==",
+      "skills/skill-article-writer/output/216bf22d7ef4987ffefd7260769c9963d263b1203000ceb6f70a59758d26c32d.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "non-object",
+    "input": {
+      "raw_input": "non-object",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/8c98af33ad01adef9f5b74e72bdf36adb3cd5e8e69b10001f8f261283fa30327.txt",
+      "article_file": "skills/skill-article-writer/output/26133e44786352857d97385da11a6052a6d402f41a0174a40bb70dd044ea995b.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_json"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/8c98af33ad01adef9f5b74e72bdf36adb3cd5e8e69b10001f8f261283fa30327.txt": "W10=",
+      "skills/skill-article-writer/output/26133e44786352857d97385da11a6052a6d402f41a0174a40bb70dd044ea995b.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "missing-id",
+    "input": {
+      "raw_input": "missing-id",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/70f2f293e478a5e94121a0eac4c33d2a083051d745abb4b6a3059868657ef693.txt",
+      "article_file": "skills/skill-article-writer/output/476bfbfb3405763706c56a1dfba5b4d7397891909cd25b80e5bc81424048715d.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/70f2f293e478a5e94121a0eac4c33d2a083051d745abb4b6a3059868657ef693.txt": "e30=",
+      "skills/skill-article-writer/output/476bfbfb3405763706c56a1dfba5b4d7397891909cd25b80e5bc81424048715d.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "wrong-type",
+    "input": {
+      "raw_input": "wrong-type",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/f35849d38e26963a09ed7d113b351971b6f401af0848eb4292e976acb8e40055.txt",
+      "article_file": "skills/skill-article-writer/output/d826363b5068dce104942d3a173d7458e265f69afd4e4f338eb66a74cb304be9.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/f35849d38e26963a09ed7d113b351971b6f401af0848eb4292e976acb8e40055.txt": "eyJwYWdlX2lkIjo0Mn0=",
+      "skills/skill-article-writer/output/d826363b5068dce104942d3a173d7458e265f69afd4e4f338eb66a74cb304be9.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "missing-file",
+    "input": {
+      "raw_input": "missing file",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/c603c464c296f088c024e37e6a1b2dfaf1cbca2c4361cb4e29ffcca2e8e095ba.txt",
+      "article_file": "skills/skill-article-writer/output/e35d1c9f0a1ed02a7a525fa06e91a670c83e8d229986303591a09ec0a13bcbc4.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input_source"
+    },
+    "fixture_files": {
+      "skills/skill-article-writer/output/e35d1c9f0a1ed02a7a525fa06e91a670c83e8d229986303591a09ec0a13bcbc4.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "wrong-metadata-producer",
+    "input": {
+      "raw_input": "wrong-metadata-producer",
+      "page_id_file": "skills/skill-article-writer/output/13951099922dc60a0625dba756548705a5775da9d9977397ab9fad5e91e2100e.txt",
+      "article_file": "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input_source"
+    },
+    "fixture_files": {
+      "skills/skill-article-writer/output/13951099922dc60a0625dba756548705a5775da9d9977397ab9fad5e91e2100e.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK",
+      "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "wrong-article-producer",
+    "input": {
+      "raw_input": "wrong-article-producer",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt",
+      "article_file": "tools/tool-webpage-og-crawler/output/9ad37e21153c81ae606003129a7b3edb75427ef62d45ff8f2de5bed776e0ed55.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input_source"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt": "eyJwYWdlX2lkIjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifQ==",
+      "tools/tool-webpage-og-crawler/output/9ad37e21153c81ae606003129a7b3edb75427ef62d45ff8f2de5bed776e0ed55.txt": "eyJwYWdlX2lkIjogImFiMTE2YzE1ZDhhYzhiNTI4NWUwYThjNzBiZTBiZjAzYWQ1NWY4Y2E2M2NiZmUwOTAzMTQyMzgxZGVjODI2OGQifQ=="
+    }
+  },
+  {
+    "case_id": "arbitrary-source",
+    "input": {
+      "raw_input": "arbitrary-source",
+      "page_id_file": "unrelated.json",
+      "article_file": "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input_source"
+    },
+    "fixture_files": {
+      "skills/skill-article-writer/output/f68b87d6ed188c0939b6c305d9ba58f969f4a010d4ad9029eaa27350f6c89dfb.txt": "IyBbVGl0bGVdKGh0dHBzOi8vZXhhbXBsZS5jb20vc3RvcnkpCipVcGRhdGVkOiAyMDI2LTEwLTIyVDA1OjQ5OjAwKzA1OjMwKgoKQXJ0aWNsZSB0ZXh0IHdpdGggW3NvdXJjZV0oaHR0cHM6Ly9leGFtcGxlLm9yZy8pLgoKIyMgU291cmNlcwoKLSBTb3VyY2UKCi0tLQoKKioqRXhhbXBsZSwgU3RvcnkqKioKCipQdWJsaXNoZWQ6IDIyIE9jdG9iZXIgMjAyNioK"
+    }
+  },
+  {
+    "case_id": "traversal-source",
+    "input": {
+      "raw_input": "traversal-source",
+      "page_id_file": "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt",
+      "article_file": "skills/skill-article-writer/output/../output/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt"
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input_source"
+    },
+    "fixture_files": {
+      "tools/tool-webpage-og-crawler/output/8ff16c9c9bfcc075e1c2de5827ab84c2ceb4bb8a24078db22b51e1ffe52b41ae.txt": "eyJwYWdlX2lkIjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifQ=="
+    }
+  }
+]

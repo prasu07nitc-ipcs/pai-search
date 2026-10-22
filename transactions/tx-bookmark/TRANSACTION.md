@@ -1,8 +1,8 @@
 Name: tx-bookmark
 
-Description: Format supplied webpage metadata as an agent-readable Markdown bookmark stored by hostname and page ID in data/bookmark/. Use to create or replace persistent bookmarks without fetching webpages.
+Description: Read same-project tool-webpage-og-crawler output JSON and format its metadata as an agent-readable Markdown bookmark stored by hostname and page ID in data/bookmark/. Use to create or replace persistent bookmarks without fetching webpages.
 
-Entry point: `transaction.py:bookmark(page: dict, raw_input: str) -> dict`
+Entry point: `transaction.py:bookmark(page_file: str, raw_input: str) -> dict`
 
 Instructions: [AGENTS.md](AGENTS.md)
 

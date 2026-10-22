@@ -3,3 +3,4 @@ reports/*
 dev-tasks/*
 transactions/.venv/
 transactions/**/__pycache__/
+.tmp/

@@ -6,13 +6,17 @@ prefix_rule(
         "-B",
         "transactions/runner.py",
         "--transaction",
-        ["tx-bookmark"],
+        ["tx-bookmark", "tx-publish-article", "tx-index"],
     ],
     decision = "allow",
     justification = "Launch approved project transactions through their dedicated sandboxing runner",
     match = [
         "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark",
         "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --input '{}'",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article --input '{}'",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --input '{}'",
     ],
     not_match = [
         "transactions/.venv/bin/python -m pip install example",

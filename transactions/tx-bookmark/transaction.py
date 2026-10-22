@@ -49,22 +49,8 @@ def _render(page: dict, domain: str) -> str:
     dates = [(label, page.get(key)) for label, key in [("Published", "datePublished"), ("Modified", "dateModified")]]
     if any(value for _, value in dates):
         lines += ["", "## Dates", ""] + [f"- {label}: {_text(value)}" for label, value in dates if value]
-    if page.get("image"):
-        lines += ["", "## Image", "", _text(page["image"])]
     lines += ["", "## Identifier", "", "- Page ID: " + page["page_id"], ""]
-    signature = json.loads(os.environ["PROJECT_TRANSACTION_SOURCE_SIGNATURE"])
-    lines += ["", "## Source Code Signature", "",
-              "- Git repository URL: " + _text(signature["repository_url"]),
-              "- Git branch: " + _text(signature["branch"]),
-              "- Git commit: " + _text(signature["commit"])]
-    if signature["local_changes"]:
-        lines.append("- Local changes:")
-        for change in signature["local_changes"]:
-            lines.append("  - " + _text(change["status"].replace(" ", ".")) + ": " + _text(change["path"]))
-    else:
-        lines.append("- Local changes: None")
-    lines.append("")
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip("\n") + "\n\n" + os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"]
 
 
 def _open_data_directory() -> int:
@@ -132,14 +118,56 @@ def _write_output(domain: str, page_id: str, content: str) -> str:
                 os.close(opened)
 
 
-def bookmark(page: dict, raw_input: str) -> dict:
+def _source_file(path, component):
+    root = Path(os.environ['PROJECT_TRANSACTION_INPUT_ROOT'])
+    source = Path(path)
+    if not source.is_absolute():
+        source = root / source
+    expected = root / component / 'output'
+    try:
+        # Require a direct output file; do not follow aliases into or out of it.
+        if (not path.strip() or '..' in source.parts
+                or source.parent != expected
+                or source.resolve() != source
+                or source.suffix != '.txt'
+                or re.fullmatch(r'[0-9a-f]{64}', source.stem) is None):
+            raise ValueError('Not a component output path')
+        info = source.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('Not a regular unaliased file')
+        return source
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise _Failure('invalid_input_source', 'Input must be a regular ' + component
+                       + '/output/<run_id>.txt file: ' + path) from exc
+
+
+def _read_input(source):
+    try:
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'r', encoding='utf-8', newline='') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise OSError('Input must be a regular unaliased file')
+            return stream.read()
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise _Failure('input_read_error', 'Could not read UTF-8 input file: ' + str(source)) from exc
+
+
+def bookmark(page_file: str, raw_input: str) -> dict:
     """Save JSON metadata; require title, description, URL and SHA-256 page ID.
 
     Optional recognized fields are strings or null; additional JSON fields are
-    preserved in the result input, not rendered. No network access or dependency installation occurs.
+    accepted but not rendered. No network access or dependency installation occurs.
     """
-    result = {"input": {"raw_input": raw_input, "processed_input": {"page": page}}, "output": None, "output_format": "markdown", "status": "error", "error": None, "meta_data": {}}
+    result = {"input": {"raw_input": raw_input, "processed_input": {"page_file": page_file}}, "output": None, "output_format": "markdown", "status": "error", "error": None, "meta_data": {}}
     try:
+        source = _source_file(page_file, 'tools/tool-webpage-og-crawler')
+        try:
+            page = json.loads(_read_input(source))
+        except (ValueError, RecursionError) as exc:
+            raise _Failure('invalid_json', 'Crawler output must contain a JSON object.') from exc
+        if not isinstance(page, dict):
+            raise _Failure('invalid_json', 'Crawler output must contain a JSON object.')
         for field in ("title", "description", "url", "page_id"):
             if not isinstance(page.get(field), str) or not page[field].strip():
                 raise _Failure("invalid_input", f"{field} must be a nonempty string.")
@@ -150,7 +178,7 @@ def bookmark(page: dict, raw_input: str) -> dict:
                 raise _Failure("invalid_input", f"{field} must be a string or null when supplied.")
         domain = _domain(page["url"])
         content = _render(page, domain)
-        result["output"] = _write_output(domain, page["page_id"], content)
+        result["output"] = [_write_output(domain, page["page_id"], content)]
         result.update(status="ok", meta_data={"domain": domain, "page_id": page["page_id"]})
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
