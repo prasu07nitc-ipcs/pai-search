@@ -1,0 +1,23 @@
+# Run from the pai-search repository root using this exact argument order.
+# Prefix matching also permits trailing runner arguments.
+prefix_rule(
+    pattern = [
+        "transactions/.venv/bin/python",
+        "-B",
+        "transactions/runner.py",
+        "--transaction",
+        ["tx-bookmark"],
+    ],
+    decision = "allow",
+    justification = "Launch approved project transactions through their dedicated sandboxing runner",
+    match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --input '{}'",
+    ],
+    not_match = [
+        "transactions/.venv/bin/python -m pip install example",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-unknown",
+        "transactions/.venv/bin/python -B transactions/runner.py --worker",
+        "transactions/.venv/bin/python -B transactions/tx-bookmark/transaction.py",
+    ],
+)

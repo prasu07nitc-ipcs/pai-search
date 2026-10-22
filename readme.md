@@ -5,6 +5,7 @@ Local tools, browser forms, context skills, and agent-executed resumable tasks w
 | Capability | Discovery | Detailed contract | Saved data |
 | --- | --- | --- | --- |
 | Tools | `tools/tool-*/TOOL.md` | Tool-local `AGENTS.md` | `output/<run_id>.txt`, `logs/` |
+| Transactions | [Transactions](transactions/README.md) | [Transactions policy](transactions/AGENTS.md) | Persistent files under exclusively owned `data/<transaction_name>/` destinations; tx-bookmark; execution logs under the transaction directory |
 | Forms | [Forms](forms/README.md) | Form-local `AGENTS.md` | `output/<execution_id>.txt`, `logs/` |
 | Skills | `skills/skill-*/SKILL.md` | Skill-local `AGENTS.md` | `input/<run_id>.txt`, `output/<run_id>.txt`, `logs/run.log`; Markdown execution entry |
 | Tasks | [Tasks](tasks/README.md), `tasks/task-*/TASK.md` | Task-local `AGENTS.md` with procedure, workflow diagram, and recovery | Run checkpoints in `checkpoints/<run_id>.json`, component output maps in `output/<run_id>.json`, and append-only `logs/run.log` per task |

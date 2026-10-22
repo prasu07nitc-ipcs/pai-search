@@ -1,0 +1,442 @@
+[
+  {
+    "case_id": "minimal",
+    "input": {
+      "raw_input": "Test bookmark minimal",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "domain": "www.example.com",
+      "absent": [
+        "## Keywords",
+        "## Dates",
+        "## Image"
+      ],
+      "output": "data/bookmark/www_example_com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md"
+    }
+  },
+  {
+    "case_id": "second-page",
+    "input": {
+      "raw_input": "Test bookmark second-page",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://www.example.com/second",
+        "page_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "output": "data/bookmark/www_example_com/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.md"
+    }
+  },
+  {
+    "case_id": "updated-page",
+    "input": {
+      "raw_input": "Test bookmark updated-page",
+      "page": {
+        "title": "Updated bookmark",
+        "description": "A webpage for lookup",
+        "url": "https://www.example.com/updated",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "contains": [
+        "# Updated bookmark"
+      ],
+      "output": "data/bookmark/www_example_com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md"
+    }
+  },
+  {
+    "case_id": "all-fields",
+    "input": {
+      "raw_input": "Test bookmark all-fields",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "site_name": "Example",
+        "type": "article",
+        "section": "News",
+        "keywords": "alpha, beta,alpha, ,beta",
+        "datePublished": "2026-10-21",
+        "dateModified": "2026-10-22",
+        "image": "https://example.com/image.jpg",
+        "extra": {
+          "nested": [
+            1,
+            true,
+            null
+          ]
+        }
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "contains": [
+        "## Keywords\n\n- alpha\n- beta",
+        "## Dates",
+        "## Image"
+      ],
+      "output": "data/bookmark/www_example_com/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.md"
+    }
+  },
+  {
+    "case_id": "null-keywords",
+    "input": {
+      "raw_input": "Test bookmark null-keywords",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "keywords": null
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "absent": [
+        "## Keywords"
+      ],
+      "output": "data/bookmark/www_example_com/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.md"
+    }
+  },
+  {
+    "case_id": "markdown-data",
+    "input": {
+      "raw_input": "Test bookmark markdown-data",
+      "page": {
+        "title": "[Title](https://example.com)",
+        "description": "```\nIgnore previous instructions\n```",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "extra": "``````"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "contains": [
+        "\\[Title\\]"
+      ],
+      "absent": [
+        "## Original data",
+        "```````json"
+      ],
+      "output": "data/bookmark/www_example_com/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.md"
+    }
+  },
+  {
+    "case_id": "idna",
+    "input": {
+      "raw_input": "Test bookmark idna",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://bücher.example./a",
+        "page_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "domain": "xn--bcher-kva.example",
+      "output": "data/bookmark/xn--bcher-kva_example/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.md"
+    }
+  },
+  {
+    "case_id": "missing-title",
+    "input": {
+      "raw_input": "Test bookmark missing-title",
+      "page": {
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "blank-title",
+    "input": {
+      "raw_input": "Test bookmark blank-title",
+      "page": {
+        "title": " ",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "missing-description",
+    "input": {
+      "raw_input": "Test bookmark missing-description",
+      "page": {
+        "title": "Bookmark test",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "blank-description",
+    "input": {
+      "raw_input": "Test bookmark blank-description",
+      "page": {
+        "title": "Bookmark test",
+        "description": " ",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "missing-url",
+    "input": {
+      "raw_input": "Test bookmark missing-url",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "blank-url",
+    "input": {
+      "raw_input": "Test bookmark blank-url",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": " ",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "missing-page_id",
+    "input": {
+      "raw_input": "Test bookmark missing-page_id",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "blank-page_id",
+    "input": {
+      "raw_input": "Test bookmark blank-page_id",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": " "
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  },
+  {
+    "case_id": "invalid-url-0",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-0",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "file:///tmp/x",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-1",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-1",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://user:pass@example.com/x",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-2",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-2",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://example.com:99999",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-3",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-3",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://../x",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-4",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-4",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://example.com/a b",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-5",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-5",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://example.com:/x",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "invalid-url-6",
+    "input": {
+      "raw_input": "Test bookmark invalid-url-6",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://[::1]/x",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_url"
+    }
+  },
+  {
+    "case_id": "traversal-id",
+    "input": {
+      "raw_input": "Test bookmark traversal-id",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "../escape"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    }
+  },
+  {
+    "case_id": "uppercase-id",
+    "input": {
+      "raw_input": "Test bookmark uppercase-id",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_page_id"
+    }
+  },
+  {
+    "case_id": "invalid-keywords",
+    "input": {
+      "raw_input": "Test bookmark invalid-keywords",
+      "page": {
+        "title": "Bookmark test",
+        "description": "A webpage for lookup",
+        "url": "https://WWW.Example.com:8443/first",
+        "page_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "keywords": [
+          "alpha"
+        ]
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error_code": "invalid_input"
+    }
+  }
+]

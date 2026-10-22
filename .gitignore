@@ -1,3 +1,5 @@
 .idea/*
 reports/*
 dev-tasks/*
+transactions/.venv/
+transactions/**/__pycache__/
