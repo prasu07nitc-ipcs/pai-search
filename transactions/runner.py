@@ -53,8 +53,8 @@ def canonical_hash(value):
 def owned_data_name(transaction_name):
     """Runner-owned mapping; transaction definitions cannot choose destinations."""
     if transaction_name == "tx-articles":
-        raise ValueError("data/articles/ is exclusively reserved for tx-publish-article.")
-    return "articles" if transaction_name == "tx-publish-article" else transaction_name[3:]
+        raise ValueError("data/articles/ is exclusively reserved for tx-save-article.")
+    return "articles" if transaction_name == "tx-save-article" else transaction_name[3:]
 
 
 def repository_http_url(remote):
@@ -446,7 +446,7 @@ def worker(transaction_name, value, expected=None, run_id=None, data_directory=N
     source_components = {
         "tx-bookmark": ("tools/tool-webpage-og-crawler",),
         "tx-index": ("tools/tool-webpage-og-crawler", "skills/skill-context-encoder"),
-        "tx-publish-article": ("tools/tool-webpage-og-crawler", "skills/skill-article-writer"),
+        "tx-save-article": ("tools/tool-webpage-og-crawler", "skills/skill-article-writer"),
     }
     if transaction_name in source_components:
         for component in source_components[transaction_name]:

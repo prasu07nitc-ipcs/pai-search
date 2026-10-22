@@ -5,32 +5,55 @@ this task. Resolve component paths and run commands from the repository root.
 
 ## Purpose and scope
 
-Collect a URL and independent Bookmark/Index selections. Fetch webpage metadata
-for Bookmark and reader-style Markdown for Index. Encode successful Markdown
-using skill-context-encoder. One agent executes the entire workflow, including
-the encoder; independent tool processes may run concurrently.
+Collect a URL and independent Bookmark/Read/Index selections. Fetch webpage
+metadata for Bookmark, Read, or Index, and reader-style Markdown for Index or Read.
+Encode successful Markdown with skill-context-encoder only for Index. For Read,
+execute skill-article-writer only after both extraction stages succeed. One agent
+executes all skill stages; independent tool processes may run concurrently.
 
-Bookmark means metadata extraction, not saving an external bookmark. Index means
-Markdown extraction and context encoding, not writing a search index/database.
-Do not add embeddings, storage services, source repair, or other component chains.
+Bookmark saves metadata through tx-bookmark. Index encodes Markdown and saves
+entity index files through tx-index. Read writes an article and saves it locally
+through tx-save-article. Task execution authorizes these selected transactions
+and their documented replacements in owned data directories. No remote publishing,
+external bookmarking, embeddings, source repair, or extra component chains are included.
 
 ## Inputs and outputs
 
 Preserve the original task request verbatim as raw_input in checkpoint recovery_meta_data and
-tool arguments. Form data is url (HTTP(S) URL), bookmark (boolean), and index
-(boolean). Both checkboxes are independent and initially unchecked.
+tool arguments. Form data is url (HTTP(S) URL), bookmark, read, and index
+(booleans). All three checkboxes are independent and initially unchecked. Treat
+a missing read field in a legacy submitted snapshot as false; do not rewrite it.
 
 Record stage outcomes and component artifact references in
 checkpoints/<run_id>.json as the shared component map. Keep arguments, form
 deadline/selections, hashes, and publication recovery state in the shared
 recovery_meta_data object within that same checkpoint.
-Use stage IDs form, bookmark, markdown, and encode consistently across resumes.
+Initialize every stage below under shared policy, including unselected stages.
+Retain the existing bookmark ID for shared metadata extraction, even for Index or
+Read alone. Transaction outputs are arrays; other stage outputs remain paths.
+
+| Stage ID | component_type | component_name | output_format |
+| --- | --- | --- | --- |
+| form | form | form-url | json |
+| bookmark | tool | tool-webpage-og-crawler | json |
+| markdown | tool | tool-webpage-markdown | markdown |
+| encode | skill | skill-context-encoder | json |
+| article | skill | skill-article-writer | markdown |
+| save_bookmark | transaction | tx-bookmark | markdown |
+| save_index | transaction | tx-index | markdown |
+| publish_article | transaction | tx-save-article | markdown |
+
+Do not migrate historical runs during editing. Existing runs without transaction
+stages retain their original execution scope on resume; adding persistence to an
+existing run requires explicit authorization before initializing new stages. Do not
+silently mark an old completed run as having executed transactions.
 Apply the shared task output-map and execution-log contract to every finished
 attempt. Return status, run ID, attempt sequence, output-map link, and available
 component output links. When
 returning encoded contents, preserve the encoder JSON and its required persisted
 execution-entry table. The Markdown file contents, not its path or tool envelope,
-are the encoder's source input.
+are the encoder's source input. When displaying article contents, preserve the
+writer Markdown and its required persisted execution-entry table.
 
 ## Execution procedure
 
@@ -137,7 +160,7 @@ wait and give concise progress updates without revealing form contents. Bound
 each request and wait to the remaining time; do not extend the five-minute window.
 
 On submission, read the full envelope and verify an accepted submit action
-occurred by the deadline. Read url/bookmark/index from meta_data.current_data,
+occurred by the deadline. Read url/bookmark/read/index from meta_data.current_data,
 record the form output reference/hash, and checkpoint completion. If the deadline
 expires, mark timed_out, retain the session, stop downstream stages, and publish the
 attempt output map and timed_out log entry under shared policy. A late
@@ -148,14 +171,14 @@ submission requires an explicitly renewed waiting window before continuation.
 Read tools/AGENTS.md and the TOOL.md/AGENTS.md of each selected tool. Validate
 arguments and environments before invoking them. Mark unselected branches skipped.
 
-If Bookmark is selected, invoke:
+If Bookmark, Read, or Index is selected, invoke once:
 
 ```sh
 tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-og-crawler \
   --input '<JSON with url and raw_input>' --timeout 30
 ```
 
-If Index is selected, invoke:
+If Index or Read is selected, invoke once:
 
 ```sh
 tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-markdown \
@@ -167,7 +190,7 @@ never by interpolating untrusted text into shell code. Use the submitted URL
 without rewriting it and the original raw_input. Markdown defaults to balanced
 mode. Each invocation uses the documented tools runtime and runner prefix.
 
-Record intended calls before starting them. When both are selected, launch the
+Record intended calls before starting them. When both extractions are required, launch the
 two invocations concurrently in separate processes through a batched tool call.
 Inspect each result independently. Require status ok, error null, and a readable
 saved output under the selected tool's output directory; save its run ID, path,
@@ -177,7 +200,8 @@ successful overall run when a required branch failed.
 
 ### 3. Encode successful Markdown
 
-Run this stage only after successful Markdown extraction. If Index was unchecked,
+Run this stage only when Index is selected and Markdown extraction succeeded.
+If Index was unchecked,
 skip this stage. If extraction failed, leave encoding pending on that dependency.
 
 Read skills/AGENTS.md, skills/skill-context-encoder/SKILL.md, and its AGENTS.md.
@@ -196,17 +220,87 @@ Preserve the exact entity_utternace spelling, allowed categories, boolean types,
 and consecutive sequence numbers. Record the skill run ID and output in the component map and its hash in the
 checkpoint recovery_meta_data. Follow the skill's displayed execution-entry requirements.
 
-### 4. Finish and report
+### 4. Write the article when Read is selected
+
+If Read is unchecked, mark article skipped even when both extraction artifacts
+exist. If Read is selected, require bookmark and markdown stages completed with
+verified successful tool outputs before invoking the writer. If either fails,
+leave article pending on that dependency and report the task failure; never run
+with only one input or invent missing metadata/Markdown. Encoding success is not
+a prerequisite for writing, nor is article success a prerequisite for encoding.
+
+Read skills/AGENTS.md, skills/skill-article-writer/SKILL.md, and its AGENTS.md.
+Verify both extraction artifact hashes and validate the writer input contract.
+Use the saved Open Graph JSON object as metadata and saved Markdown text as main
+content, not tool envelopes or path strings. Preserve both UTF-8 file contents
+verbatim and in metadata-then-Markdown order. Their exact contents joined with
+two newlines form the writer's raw_input; do not add the task request, reserialize
+metadata, or substitute the form URL for absent/invalid metadata fields. Invalid
+writer inputs fail this task stage without a skill execution record.
+
+Record invocation intent and source references/hashes before execution. The same
+agent executes skill-article-writer directly, following its research, timestamp,
+cache, validation, and persistence rules. A valid cache hit reuses the original
+article and entry; never force a refresh by changing input or deleting history.
+Record its component run ID, verified output reference, outcome, and output hash.
+A handled writer failure fails the task while retaining successful extractions
+and encoding. Display the writer execution entry whenever returning its result.
+
+### 5. Persist selected results through transactions
+
+Read transactions/AGENTS.md and the selected transaction's TRANSACTION.md and
+AGENTS.md before invocation. Use only transactions/.venv/bin/python -B
+transactions/runner.py from the repository root. Do not create environments or
+write data/ directly. Preserve the original task request as raw_input in every
+transaction input; safely serialize and shell-quote arguments.
+
+| Stage | Enabled by | Required completed stages | Transaction input paths |
+| --- | --- | --- | --- |
+| save_bookmark | Bookmark | bookmark | page_file = crawler output |
+| save_index | Index | bookmark, encode | page_file = crawler output; context_file = encoder output |
+| publish_article | Read | bookmark, article | page_id_file = crawler output; article_file = writer output |
+
+Pass the saved producer payload paths, never envelopes, inline contents, or files
+copied into a different folder. Verify source hashes immediately before invocation.
+All paths must satisfy the transaction's producer-folder and file identity rules.
+The crawler URL/page ID must satisfy tx-index's exact URL hash check; the writer's
+linked title URL must hash to the crawler page ID for tx-save-article. A mismatch
+fails the transaction; do not rewrite producer files or normalize URLs to force it.
+
+Invoke each selected transaction once after its dependencies succeed:
+
+```sh
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --input '<JSON with raw_input and page_file>'
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --input '<JSON with raw_input, page_file, and context_file>'
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --input '<JSON with raw_input, page_id_file, and article_file>'
+```
+
+Record exact arguments, source references/hashes, and invocation intent before each
+call. Mark unselected transactions skipped. Selected transactions with failed
+producer dependencies remain pending; independent branches may still complete.
+Require status ok, error null, and the accepted output array of readable regular
+files within the transaction-owned data directory. Save the transaction run ID,
+output array, and a hash for every output path. Preserve failure metadata (including
+partial affected_paths) in recovery_meta_data. A null failure output does not mean
+no mutation occurred. Do not claim rollback or exactly-once execution.
+
+Follow duplicate confirmation, locking, and tx-index journal rules. Reconcile
+interrupted or failed mutations with matching transaction records/journal and
+artifacts before retry. Uncertain effects require confirmation; never silently
+pass --rerun. Do not regenerate successful producers to bypass duplicate checks.
+Each selected branch completes only after its transaction succeeds. Local storage
+failure fails the overall task while preserving successful producer and sibling
+artifacts. Transactions may replace files from prior runs; a later changed artifact
+hash is a recovery error, not permission to overwrite it again.
+
+### 6. Finish and report
 
 Mark completed only when every required stage completed or was correctly skipped.
 Otherwise retain a clear failure, timeout, cancellation, or confirmation status,
 including the next required action. Publish the shared output map, append the finished attempt entry, and return
-the run ID, attempt sequence, status, output-map and component links. Use stage
-IDs form, bookmark, markdown, encode with formats json, json, markdown, json
-respectively. Apply this publication on failure, timeout, cancellation, and
+the run ID, attempt sequence, status, output-map and component links. Use all eight stage IDs and declared formats from the stage table above. Apply this publication on failure, timeout, cancellation, and
 awaiting_confirmation as well as completion.
-For successful completion, copy all checkpoint attributes for form, bookmark,
-markdown, and encode into their respective output-map stages, including correctly
+For successful completion, copy all checkpoint attributes for all eight stages into their respective output-map stages, including correctly
 skipped stages. Preserve exact values and field order; exclude recovery_meta_data.
 Validate stage equality before publishing and record the enriched map's hash in
 the checkpoint publication metadata.
@@ -218,26 +312,33 @@ Do not execute this task as part of editing or discussing its instructions.
 
 ```mermaid
 flowchart TD
-    A[Create checkpoint and URL form session] --> B[Wait up to 300 seconds for accepted submission]
+    A[Create checkpoint and URL form] --> B[Wait up to 300 seconds]
     B -->|Deadline expires| T[Timed out: retain session]
     T -->|Explicit renewal| B
-    B -->|Submitted| C{Bookmark selected?}
-    B -->|Submitted| D{Index selected?}
-    C -->|Yes| E[Run Open Graph crawler]
-    C -->|No| F[Skip metadata]
-    D -->|Yes| G[Run Markdown extraction]
-    D -->|No| H[Skip Markdown and encoder]
-    G -->|Success| I[Same agent validates source and executes context encoder]
-    E --> J[Join required stage outcomes]
-    F --> J
-    H --> J
+    B -->|Submitted| C{Any selection?}
+    C -->|Yes| D[Extract metadata once]
+    B -->|Read or Index| E[Extract Markdown once]
+    D -->|Bookmark selected and success| F[tx-bookmark]
+    E -->|Index selected and success| G[Context encoder]
+    D --> H[tx-index: Index selected and both inputs successful]
+    G --> H
+    D --> I[Article writer: Read selected and both extractions successful]
+    E --> I
+    D --> J[tx-save-article: Read selected and both inputs successful]
     I --> J
-    G -->|Failure| J
-    J -->|All required stages successful| K[Completed: artifact references]
-    J -->|Failure| L[Failed: retain successful branches]
-    L -->|Requested resume| M[Reconcile outputs and resume unfinished stages]
-    M -->|Uncertain tool effects| N[Await explicit confirmation]
+    F --> K[Join all required stage outcomes]
+    H --> K
+    J --> K
+    C -->|No: form only| K
+    D -->|Failure| K
+    E -->|Failure| K
+    G -->|Failure| K
+    I -->|Failure| K
+    K --> L[Publish output map and finished-attempt log]
+    L --> M[Completed only if all required stages succeed]
+    L --> N[Otherwise retain successful work and report next action]
 ```
+
 
 ## Recovery and cancellation
 
@@ -251,7 +352,10 @@ Verify successful artifact hashes and keep completed branches. For an unfinished
 tool, inspect only its matching component record/output before retry. An uncertain
 execution or previously successful duplicate input requires explicit confirmation
 before passing --rerun. Do not infer completion from an output file alone.
-For the encoder, follow its existing cache/error policy; cached failures or
+For transactions, reconcile matching records, source/output hashes, partial writes,
+and the tx-index journal before retry; never assume a failed or interrupted mutation
+was rolled back. Retain all successful transaction stages on resume.
+For both skills, follow their existing cache/error policies; cached failures or
 orphaned/malformed storage cannot be bypassed by deleting history.
 
 Cancellation stops launching work and retains checkpoints, sessions, and committed
@@ -261,24 +365,33 @@ Progress stops when the agent session ends; resume requires an active agent.
 
 ## Acceptance criteria
 
-| Bookmark | Index | Required outputs |
-| --- | --- | --- |
-| false | false | Submitted form only; extraction and encoding skipped |
-| true | false | Submitted form and metadata; Markdown and encoding skipped |
-| false | true | Submitted form, Markdown, and context JSON |
-| true | true | Submitted form, metadata, Markdown, and context JSON |
+| Bookmark | Read | Index | Required outputs |
+| --- | --- | --- | --- |
+| false | false | false | Submitted form only |
+| true | false | false | Form, metadata, saved bookmark |
+| false | false | true | Form, metadata, Markdown, context JSON, saved entity index files |
+| true | false | true | Form, metadata, Markdown, context JSON, saved bookmark and entity index files |
+| false | true | false | Form, metadata, Markdown, article, saved article |
+| true | true | false | Form, metadata, Markdown, article, saved bookmark and article |
+| false | true | true | Form, metadata, Markdown, context JSON, article, saved entity index files and article |
+| true | true | true | All producer outputs, saved bookmark, entity index files, and article |
+
+Unrequired stages are skipped. Required downstream stages remain pending when
+a required producer dependency fails; the overall attempt fails.
 
 - Only an accepted, timely submission satisfies the form checkpoint.
-- Both selected extraction tools execute concurrently.
+- Both required extraction tools execute concurrently, once each per invocation.
+- Writing requires Read selected and both extraction stages successful.
+- Read alone never enables context encoding; Index controls encoding.
 - Encoding consumes the saved Markdown text only after extraction succeeds.
 - The same agent executes all orchestration and skill stages.
 - Checkpoints preserve session/deadline, decisions, outcomes, and artifact references.
 - Resume verifies/reuses completed work and reconciles uncertain work before retry.
-- Overall completion reflects every required branch and the skill's result contract.
+- Overall completion reflects every required producer and transaction stage.
 
 - Every finished attempt publishes the component output map and exactly one shared-contract log entry.
 
-- Checkpoint stages use component types form, tool, tool, skill and names
-  form-url, tool-webpage-og-crawler, tool-webpage-markdown,
-  skill-context-encoder respectively. Component run_id and stage attempt_seq
+- Checkpoint stages use the eight IDs, component types, names, and formats in the
+  stage table. Transaction outputs retain arrays and per-file hashes. Metadata is
+  required for any selection; persistence runs only for its corresponding checkbox. Component run_id and stage attempt_seq
   remain distinct from task run identity and task attempt sequence.

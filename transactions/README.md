@@ -14,7 +14,7 @@ transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index -
 | Transaction | Inputs besides `raw_input` | Owned destination |
 | --- | --- | --- |
 | [tx-bookmark](tx-bookmark/AGENTS.md) | `page_file` | `data/bookmark/<domain>/<page_id>.md` |
-| [tx-publish-article](tx-publish-article/AGENTS.md) | `page_id_file`, `article_file` | `data/articles/<domain>/<page_id>.md` |
+| [tx-save-article](tx-save-article/AGENTS.md) | `page_id_file`, `article_file` | `data/articles/<domain>/<page_id>.md` |
 | [tx-index](tx-index/AGENTS.md) | `page_file`, `context_file` | `data/index/<exact entity_name>/<domain>/<page_id>.md` |
 
 Producer run IDs are 64 lowercase hexadecimal characters. See the linked
@@ -36,7 +36,7 @@ noninteractively; use `--rerun` only after explicit user confirmation.
 transactions/.venv/bin/python -B transactions/test_runner.py
 transactions/.venv/bin/python -B transactions/test_index.py
 transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --cases transactions/tx-bookmark/test-cases.json --summary
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article --cases transactions/tx-publish-article/test-cases.json --summary
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --cases transactions/tx-save-article/test-cases.json --summary
 transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --cases transactions/tx-index/test-cases.json --summary
 ```
 

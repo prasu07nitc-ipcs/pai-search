@@ -1,7 +1,7 @@
 # Tasks project
 
 Maintain a library of tasks executed by one agent using existing project forms,
-tools, and skills. Each task-<name>/ contains TASK.md and AGENTS.md. TASK.md is
+tools, skills, and transactions. Each task-<name>/ contains TASK.md and AGENTS.md. TASK.md is
 its concise discovery entry; AGENTS.md is the complete execution authority,
 including procedure, workflow diagram, recovery, and acceptance criteria.
 
@@ -18,7 +18,9 @@ The same agent orchestrates all stages and executes instruction-based skills
 itself. Independent tools may run concurrently in separate processes through
 batched tool calls. No subagents, model subprocesses, task runner, scheduler, or
 additional environment is required. Forms and tools still use their documented
-runners, virtual environments, permissions, and output contracts. Skills retain
+runners, virtual environments, permissions, and output contracts. Transactions use
+their dedicated runner and owned data boundaries; only transactions write shared
+persistent data. Skills retain
 their own cache, validation, persistence, and response rules.
 
 Progress requires an active agent. A saved checkpoint does not schedule a wakeup
@@ -57,7 +59,7 @@ these fields, in this order:
 }
 ```
 
-component_type is form, tool, or skill; component_name is the selected component's
+component_type is form, tool, skill, or transaction; component_name is the selected component's
 exact directory name. run_id inside a stage identifies the component execution
 (or form session), NOT the task run identified by the checkpoint filename. It is
 null until known. Component-local IDs need not be globally unique. attempt_seq
@@ -72,7 +74,9 @@ the current/latest invocation; this checkpoint is not stage attempt history.
 Use pending, running, waiting, completed, skipped, failed, timed_out, cancelled,
 and awaiting_confirmation as applicable. error is null when no error applies,
 otherwise exactly nonempty code and message strings. output is a verified
-repository-relative component output path, or null when unavailable;
+repository-relative component output path, or null when unavailable. Transaction
+stages instead preserve the accepted nonempty array of unique repository-relative
+output paths, or null on failure; never flatten it or substitute a receipt;
 output_format is the declared format, retained even without output. Include every
 declared stage from initialization. For a successfully completed attempt, copy
 every component-stage field into the matching output-map stage, preserving its
@@ -91,7 +95,8 @@ attempt-specific files. recovery_meta_data contains:
   updated_at, overall status, attempt_seq (task attempt), attempt_input, and
   attempt_started_at.
 - stages keyed by the same stage IDs, containing exact arguments or source
-  references and hashes, output_sha256, form session_url, original deadline,
+  references and hashes, output_sha256 (single-output stages), output_sha256_by_path
+  (transaction stages: exact output path to SHA-256 mapping), form session_url, original deadline,
   submitted selections, and any reconciliation details needed by that stage.
   Do not duplicate component payloads or the checkpoint's component-map fields.
 - publication: null before publication; otherwise an object containing status
@@ -130,7 +135,7 @@ instruction_version or instruction_sha256 to new records.
 Reuse completed stages. Missing or changed outputs are recovery errors, not
 permission to rerun. Preserve the form session and original deadline; renewing a
 waiting window requires an explicit request. Retry only unfinished/failed stages
-within the requested scope. Uncertain tool effects and duplicate successful
+within the requested scope. Uncertain tool or transaction effects and duplicate successful
 inputs require the component's explicit rerun confirmation. Never silently pass
 --rerun. Respect skill cache errors and cached failures; never delete history to
 force execution.
@@ -182,7 +187,11 @@ output_format:
 ```
 
 Component output paths are repository-relative, confined to their documented
-output directories. Verify readable regular files and saved hashes before
+output directories or transaction-owned data directories. Transaction output arrays
+retain every path and require a verified hash for each file. A transaction failure
+may have partial or uncertain writes even with null output: preserve its result
+metadata and reconciliation references in recovery_meta_data; do not infer rollback
+or retry blindly. Follow transaction-specific journals and confirmation rules. Verify readable regular files and saved hashes before
 referencing them. output is null when no verified output is available; preserve
 its declared output_format. A waiting or timed-out form can reference its verified
 saved session envelope even though it is not submitted. Stage status does not

@@ -248,7 +248,7 @@ def bookmark(page_file: str, raw_input: str) -> dict:
 class ArticleIntegration(unittest.TestCase):
     def setUp(self):
         IsolatedIntegration.setUp(self)
-        shutil.copytree(runner.ROOT / 'tx-publish-article', self.transactions / 'tx-publish-article',
+        shutil.copytree(runner.ROOT / 'tx-save-article', self.transactions / 'tx-save-article',
                         ignore=shutil.ignore_patterns('logs', '__pycache__'))
         self.url = 'https://example.com/story'
         self.page_id = hashlib.sha256(self.url.encode()).hexdigest()
@@ -263,7 +263,7 @@ class ArticleIntegration(unittest.TestCase):
         markdown.write_text(article)
         value = {'page_id_file': str(metadata), 'article_file': str(markdown), 'raw_input': 'Publish ' + text}
         completed = subprocess.run([str(runner.PYTHON), '-B', str(self.transactions / 'runner.py'),
-                                   '--transaction', 'tx-publish-article', '--input', json.dumps(value)],
+                                   '--transaction', 'tx-save-article', '--input', json.dumps(value)],
                                   capture_output=True, text=True, cwd=self.project, timeout=20)
         return completed, article
 
@@ -273,19 +273,19 @@ class ArticleIntegration(unittest.TestCase):
         result = json.loads(first.stdout)
         self.assertEqual(result['output'], [f'data/articles/example_com/{self.page_id}.md'])
         target = self.project / result['output'][0]
-        self.assertEqual(target.read_text(), article + '\n\nSource Page ID: ' + self.page_id + '\n\n' + runner.signature_markdown(runner.source_code_signature(self.transactions / 'tx-publish-article')))
+        self.assertEqual(target.read_text(), article + '\n\nSource Page ID: ' + self.page_id + '\n\n' + runner.signature_markdown(runner.source_code_signature(self.transactions / 'tx-save-article')))
         replaced, updated = self.execute_article('Replacement text.')
         self.assertEqual(replaced.returncode, 0, replaced.stderr)
-        expected = updated + '\n\nSource Page ID: ' + self.page_id + '\n\n' + runner.signature_markdown(runner.source_code_signature(self.transactions / 'tx-publish-article'))
+        expected = updated + '\n\nSource Page ID: ' + self.page_id + '\n\n' + runner.signature_markdown(runner.source_code_signature(self.transactions / 'tx-save-article'))
         self.assertEqual(target.read_text(), expected)
         mismatch, _ = self.execute_article('Mismatch', url='https://example.com/other')
         rejected = json.loads(mismatch.stdout)
         self.assertEqual(rejected['error']['code'], 'page_id_mismatch')
         self.assertEqual(target.read_text(), expected)
-        records = [json.loads(line) for line in (self.transactions / 'tx-publish-article/logs/run.log').read_text().splitlines()]
+        records = [json.loads(line) for line in (self.transactions / 'tx-save-article/logs/run.log').read_text().splitlines()]
         self.assertEqual(records[0]['output'], result['output'])
         self.assertIsNone(records[-1]['output'])
-        self.assertFalse((self.project / 'data/publish-article').exists())
+        self.assertFalse((self.project / 'data/save-article').exists())
 
     def test_alias_target_rejected(self):
         owned = self.project / 'data/articles/example_com'
@@ -316,7 +316,7 @@ class ArticleIntegration(unittest.TestCase):
                      'raw_input': 'Reject source ' + str(index)}
             completed = subprocess.run(
                 [str(runner.PYTHON), '-B', str(self.transactions / 'runner.py'),
-                 '--transaction', 'tx-publish-article', '--input', json.dumps(value)],
+                 '--transaction', 'tx-save-article', '--input', json.dumps(value)],
                 capture_output=True, text=True, cwd=self.project, timeout=20)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             rejected = json.loads(completed.stdout)
@@ -325,17 +325,17 @@ class ArticleIntegration(unittest.TestCase):
         self.assertEqual(outside.read_text(), 'unrelated')
 
     def test_mapping_is_exclusive(self):
-        self.assertEqual(runner.owned_data_name('tx-publish-article'), 'articles')
+        self.assertEqual(runner.owned_data_name('tx-save-article'), 'articles')
         self.assertEqual(runner.owned_data_name('tx-bookmark'), 'bookmark')
         with self.assertRaises(ValueError):
             runner.prepare_data('tx-articles', self.project / 'data')
         good = {'input': {'raw_input': 'x', 'processed_input': {}},
                 'output': [f'data/articles/example_com/{self.page_id}.md'], 'output_format': 'markdown',
                 'status': 'ok', 'error': None, 'meta_data': {}}
-        runner.validate_output(good, 'tx-publish-article')
-        for path in ('data/bookmark/a.md', 'data/publish-article/a.md', 'data/articles/../a.md'):
+        runner.validate_output(good, 'tx-save-article')
+        for path in ('data/bookmark/a.md', 'data/save-article/a.md', 'data/articles/../a.md'):
             with self.subTest(path=path), self.assertRaises(ValueError):
-                runner.validate_output(dict(good, output=[path]), 'tx-publish-article')
+                runner.validate_output(dict(good, output=[path]), 'tx-save-article')
 
 
 if __name__ == '__main__':

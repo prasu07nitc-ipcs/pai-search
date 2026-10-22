@@ -2,7 +2,7 @@
 
 This directory is the persistent data area for the transactions framework. Paths are relative to the repository root.
 
-- Among framework workers, only transactions may write here, and only within their exclusively owned `data/<transaction_name>/` directory derived from the `tx-<transaction_name>` name. Exception: `tx-publish-article` exclusively owns `data/articles/` through a fixed runner-owned mapping; `tx-articles` is reserved and rejected. Tools must not write here.
+- Among framework workers, only transactions may write here, and only within their exclusively owned `data/<transaction_name>/` directory derived from the `tx-<transaction_name>` name. Exception: `tx-save-article` exclusively owns `data/articles/` through a fixed runner-owned mapping; `tx-articles` is reserved and rejected. Tools must not write here.
 - No transaction may write another transaction’s data directory or the data root. `tx-bookmark` owns data/bookmark/; `tx-index` owns data/index/.
 - Transaction-specific data directories are created only at runtime for authorized invocations. The parent runner prepares and validates the selected directory; workers receive no write access to the data root. Do not create placeholder data subdirectories during scaffolding or discovery.
 - Authorized consumers may read shared data within their own access contracts.
@@ -14,7 +14,7 @@ This directory is the persistent data area for the transactions framework. Paths
 
 The tx-bookmark implementation has been migrated; no bookmark data has been created or moved. Transaction data directories are created only by runtime invocations.
 
-- data/articles/ is reserved for validated Markdown articles grouped by normalized hostname (dots replaced by underscores), named <page_id>.md, owned exclusively by tx-publish-article.
+- data/articles/ is reserved for validated Markdown articles grouped by normalized hostname (dots replaced by underscores), named <page_id>.md, owned exclusively by tx-save-article.
 
 - data/index/ is owned exclusively by tx-index. Exact entity-name folders contain
   domain folders (dots replaced with underscores), containing <page_id>.md files.

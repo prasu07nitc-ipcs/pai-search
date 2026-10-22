@@ -6,7 +6,9 @@ instructions, uses existing component runners, and saves checkpoints for resume.
 ## Library
 
 - [task-index-web-page](task-index-web-page/TASK.md): collect a URL, extract
-  selected metadata/Markdown, and encode Markdown into entity context.
+  selected metadata/Markdown, encode Markdown into entity context for Index, and
+  generate a researched article for Read after both extractions succeed. Persist
+  selected results through tx-bookmark, tx-index, and tx-save-article.
 
 ## Use
 
@@ -17,8 +19,8 @@ Ask the agent:
 - "Resume task-index-web-page run: `run-id`."
 - "Cancel task-index-web-page run: `run-id`."
 
-The agent opens the form and waits up to five minutes for submission. Bookmark
-and Index select independent extraction branches; selected tools run concurrently.
+The agent opens the form and waits up to five minutes for submission. Any selected checkbox requires metadata; Index or Read requires Markdown. Required
+extraction tools run concurrently. Read enables article writing after both succeed.
 The same agent executes the encoder after successful Markdown extraction.
 No task-specific Python environment or separate model worker is needed.
 
@@ -54,12 +56,16 @@ checkpoints retain IDs, paths, hashes, decisions, and stage outcomes. Run folder
 are gitignored and may contain private URLs or user input; do not commit them.
 
 Resume verifies outputs and reconciles committed component records before retry.
-Successful branches are retained. Bookmark-only and neither-selected runs skip
-encoding. Metadata extraction does not save an external bookmark, and this task
-does not populate a search database.
+Successful branches are retained. Encoding requires Index. Read alone extracts metadata and Markdown and writes an
+article, without encoding; Bookmark-only and neither-selected runs skip encoding.
+Bookmark saves metadata in data/bookmark/, Index saves entity files in data/index/,
+and Read saves the generated article in data/articles/. Transactions consume saved
+producer files and perform all shared-data writes. Publication is local only.
 
 The existing forms server and tool runtimes remain required. Their environment
-and duplicate-input policies still apply. The encoder uses its existing skill
+and duplicate-input policies still apply. The dedicated transactions runtime is
+also required; transaction stages preserve output path arrays and per-file hashes.
+Partial or uncertain mutations require reconciliation before retry. The encoder uses its existing skill
 cache/logging contract directly; no Codex CLI subprocess is launched.
 
 ## Verification
@@ -85,7 +91,7 @@ rerun; an explicit rerun request counts. No attempt-specific files are created.
 After successful completion, the run-specific output JSON copies all component
 stage attributes from the checkpoint into the matching stage: component_type,
 component_name, started_at, completed_at, status, component run_id, stage
-attempt_seq, repository-relative output path (or null), output_format, and error.
+attempt_seq, repository-relative output path, transaction output array (or null), output_format, and error.
 Other finished outcomes include only status, output, and output_format per stage.
 Logs reference this map using
 a task-relative path. Subsequent attempts replace the same map; earlier log

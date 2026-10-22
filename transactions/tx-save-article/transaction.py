@@ -175,7 +175,7 @@ def _read_input(source):
         raise _Failure('input_read_error', 'Could not read UTF-8 input file: ' + str(source)) from exc
 
 
-def publish_article(page_id_file: str, article_file: str, raw_input: str) -> dict:
+def save_article(page_id_file: str, article_file: str, raw_input: str) -> dict:
     result = {'input': {'raw_input': raw_input, 'processed_input': {'page_id_file': page_id_file, 'article_file': article_file}},
               'output': None, 'output_format': 'markdown', 'status': 'error', 'error': None, 'meta_data': {}}
     try:

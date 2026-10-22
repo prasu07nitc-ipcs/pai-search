@@ -1,8 +1,8 @@
-# Publish article
+# Save article
 
 ## Inputs and source identity
 
-`publish_article(page_id_file: str, article_file: str, raw_input: str) -> dict` has no defaults.
+`save_article(page_id_file: str, article_file: str, raw_input: str) -> dict` has no defaults.
 `raw_input` preserves the original request. Inputs must be the saved payload
 files from these producers, using absolute paths or repository-relative paths:
 
@@ -20,7 +20,7 @@ before content or hash errors, and never write an article. Location establishes
 the producer boundary; logs are not read and this is not cryptographic proof of
 authorship or protection against manual edits inside a producer output folder.
 
-Only tx-publish-article receives read access to these two producer output folders;
+Only tx-save-article receives read access to these two producer output folders;
 arbitrary caller-specified paths receive no read grant. Existing runtime and
 transaction implementation reads and owned article writes remain required.
 Other transactions' file access is unchanged. The transaction never modifies
@@ -95,9 +95,9 @@ Use only the dedicated standard-library-only transactions runtime and runner fro
 the repository root. No dependencies are added or installed.
 
 ```sh
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article --input '{"raw_input":"Publish supplied article files","page_id_file":"tools/tool-webpage-og-crawler/output/<crawler_run_id>.txt","article_file":"skills/skill-article-writer/output/<writer_run_id>.txt"}'
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --input '{"raw_input":"Save supplied article files","page_id_file":"tools/tool-webpage-og-crawler/output/<crawler_run_id>.txt","article_file":"skills/skill-article-writer/output/<writer_run_id>.txt"}'
 
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-publish-article --cases transactions/tx-publish-article/test-cases.json --summary
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --cases transactions/tx-save-article/test-cases.json --summary
 ```
 
 The JSON file page_id must equal the actual title URL digest.
