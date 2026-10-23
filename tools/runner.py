@@ -1,4 +1,4 @@
-"""Shared project tool runner and append-only test harness (macOS, Python 3.11+)."""
+"""Shared production tool runner (macOS, Python 3.11+)."""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,6 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-import uuid
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -36,7 +35,7 @@ def logs_directory(directory):
     if target.is_symlink():
         raise ValueError("Logs directory must not be a symlink")
     target.mkdir(exist_ok=True)
-    for name in ("run.log", "runner.log", "test-report.log"):
+    for name in ("run.log", "runner.log"):
         path = target / name
         if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink != 1)):
             raise ValueError("Logs must be regular, unlinked files")
@@ -123,7 +122,7 @@ def resolve_tool(name):
     directory = ROOT / name
     if directory.is_symlink() or directory.resolve().parent != ROOT:
         raise ValueError("Tool must be a direct, non-symlink project directory.")
-    for filename in ("TOOL.md", "AGENTS.md", "tool.py", "validator.py"):
+    for filename in ("TOOL.md", "AGENTS.md", "tool.py"):
         path = directory / filename
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"Missing regular tool file: {filename}")
@@ -139,16 +138,6 @@ def resolve_tool(name):
     entry = re.search(r"^Entry point: `tool\.py:([A-Za-z_]\w*)", discovery, re.M)
     if entry is None or entry[1].startswith("_"):
         raise ValueError("TOOL.md must declare a public tool.py function entry point.")
-    validator_tree = ast.parse((directory / "validator.py").read_text(encoding="utf-8"))
-    checker = next((node for node in validator_tree.body
-                    if isinstance(node, ast.FunctionDef) and node.name == "check_result"), None)
-    if (checker is None or checker.args.posonlyargs or checker.args.kwonlyargs
-            or checker.args.vararg or checker.args.kwarg or checker.args.defaults
-            or [argument.arg for argument in checker.args.args] != ["value", "actual", "expected"]
-            or any(argument.annotation is None or ast.unparse(argument.annotation) != "dict"
-                   for argument in checker.args.args)
-            or checker.returns is None or ast.unparse(checker.returns) != "list[str]"):
-        raise ValueError("validator.py must define check_result(value: dict, actual: dict, expected: dict) -> list[str].")
     return directory, entry[1]
 
 
@@ -237,7 +226,7 @@ def validate_output(result, tool_name=None, run_id=None):
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
-                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.(?:txt|md)", output) is None
+                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64})\.(?:txt|md)", output) is None
                 or "/../" in output or "/./" in output):
             raise ValueError("Successful output must reference tool output/<run_id>.txt or <run_id>.md relative to tools/.")
         if tool_name is not None and output not in {f"{tool_name}/output/{run_id}.txt", f"{tool_name}/output/{run_id}.md"}:
@@ -282,7 +271,7 @@ def output_directory(directory):
 
 
 @log_execution
-def worker(tool_name, value, expected=None, run_id=None):
+def worker(tool_name, value, run_id=None):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
@@ -337,7 +326,7 @@ def worker(tool_name, value, expected=None, run_id=None):
             os._exit(1)
         os.waitpid(child, 0)
         raise RuntimeError("Sandbox process restriction verification failed.")
-    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
         raise ValueError("Invalid execution run_id.")
     os.environ["PROJECT_TOOL_RUN_ID"] = run_id
     # Keep tool prints away from the JSON transport on stdout.
@@ -352,42 +341,25 @@ def worker(tool_name, value, expected=None, run_id=None):
                 raise ValueError(f"Incorrect type for argument {name}.")
         result = log_execution(function)(**value)
         validate_output(result, tool_name, run_id)
-        failures = []
-        if expected is not None:
-            if "status" in expected and result["status"] != expected["status"]:
-                failures.append("Unexpected status")
-            checks = directory / "validator.py"
-            if checks.is_symlink() or not checks.is_file():
-                raise ValueError("validator.py must be a regular tool-local file.")
-            validator = load_module(checks, "validator_" + tool_name.replace("-", "_"))
-            tool_failures = log_execution(validator.check_result)(value, result, expected)
-            if not isinstance(tool_failures, list) or any(not isinstance(item, str) for item in tool_failures):
-                raise ValueError("Validator must return a list of failure strings.")
-            failures.extend(tool_failures)
-            if any(not isinstance(item, str) for item in failures):
-                raise ValueError("Test checks must return a list of failure strings.")
-    packet = {"output": result, "failed_checks": failures} if expected is not None else result
-    print(json.dumps(packet, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
+    print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
 @log_execution
-def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_id=None, rerun=False):
+def invoke(tool_name, value, *, timeout=20, rerun=False):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
-    if expected is not None and not test_run:
-        raise ValueError("Test expectations require test_run=True.")
     logs_directory(directory)
     input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
-    if not test_run and not rerun:
+    if not rerun:
         log_execution(require_new_input)(directory, input_id)
     outputs = output_directory(directory)
     if outputs is not None:
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
-    run_id = (run_id or str(uuid.uuid4())) if test_run else input_id
+    run_id = input_id
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
@@ -400,12 +372,11 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
     try:
         completed = subprocess.run(
             [str(PYTHON), "-B", str(Path(__file__).resolve()), "--tool", tool_name, "--worker"],
-            input=json.dumps({"input": value, "expected": expected, "run_id": run_id}), text=True, capture_output=True,
+            input=json.dumps({"input": value, "run_id": run_id}), text=True, capture_output=True,
             cwd=str(ROOT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr
-        packet = json.loads(completed.stdout)
-        result = packet["output"] if expected is not None else packet
+        result = json.loads(completed.stdout)
         validate_output(result, tool_name, run_id)
         record.update(
             raw_input=result["input"]["raw_input"],
@@ -414,7 +385,7 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
             status=result["status"], error=result["error"],
             meta_data=result["meta_data"],
         )
-        return packet
+        return result
     except subprocess.TimeoutExpired as exc:
         worker_stderr = exc.stderr
         record["error"] = {"code": "runner_timeout", "message": f"Execution exceeded {timeout:g} seconds."}
@@ -429,86 +400,18 @@ def invoke(tool_name, value, *, test_run=False, expected=None, timeout=20, run_i
             if isinstance(worker_stderr, bytes):
                 worker_stderr = worker_stderr.decode("utf-8", errors="replace")
             LOGGER.info("Worker diagnostics:\n%s", worker_stderr.rstrip())
-        if not test_run:
-            with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
-                fcntl.flock(log, fcntl.LOCK_EX)
-                log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-                log.flush()
-                os.fsync(log.fileno())
-
-
-@log_execution
-def run_tests(tool_name, cases_path, log_path, *, timeout=20, summary=False):
-    verify_environment()
-    directory, entry = resolve_tool(tool_name)
-    if log_path.resolve() != (directory / "logs" / "test-report.log").resolve():
-        raise ValueError("Test results must be written to the selected tool test-report.log.")
-    logs_directory(directory)
-    cases = json.loads(cases_path.read_text())
-    for case in cases:
-        validate_input(directory, entry, case["input"])
-        if not isinstance(case["expected"], dict):
-            raise ValueError("Test expectations must be JSON objects.")
-    all_passed = True
-    failed_case_ids = []
-    for case in cases:
-        value = case["input"]
-        started = datetime.now(timezone.utc).isoformat()
-        begin = time.monotonic()
-        run_id = str(uuid.uuid4())
-        actual, execution_error = None, None
-        failures = []
-        try:
-            packet = invoke(tool_name, value, test_run=True, expected=case["expected"], timeout=timeout, run_id=run_id)
-            actual = packet["output"]
-            failures.extend(packet["failed_checks"])
-        except (subprocess.SubprocessError, ValueError, OSError) as exc:
-            execution_error = str(exc)
-            if isinstance(exc, subprocess.CalledProcessError):
-                execution_error += " " + (exc.stderr or "")[-4000:]
-            failures.append("Runner execution failed")
-        record = {
-            "run_id": run_id, "case_id": case["case_id"],
-            "input_hash": hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest(),
-            "implementation_sha256": hashlib.sha256((directory / "tool.py").read_bytes()).hexdigest(),
-            "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "started_at": started, "duration_ms": round((time.monotonic() - begin) * 1000),
-            "input": value, "expected": case["expected"], "actual": actual,
-            "execution_error": execution_error, "passed": not failures, "failed_checks": failures,
-        }
-        # Lock both duplicate-ID checking and append to keep concurrent writers safe.
-        with log_path.open("a+", encoding="utf-8") as log:
+        with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
             fcntl.flock(log, fcntl.LOCK_EX)
-            log.seek(0)
-            if any(json.loads(line)["run_id"] == record["run_id"] for line in log if line.strip()):
-                raise RuntimeError("Duplicate run_id; refusing duplicate log entry")
-            log.seek(0, 2)
             log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
             log.flush()
             os.fsync(log.fileno())
-        all_passed = all_passed and record["passed"]
-        if not record["passed"]:
-            failed_case_ids.append(record["case_id"])
-        if not summary:
-            print(json.dumps(record, ensure_ascii=False, separators=(",", ":")), flush=True)
-    if summary:
-        print(json.dumps({"tool": tool_name, "status": "ok" if all_passed else "error",
-                          "total_cases": len(cases), "passed_cases": len(cases) - len(failed_case_ids),
-                          "failed_cases": len(failed_case_ids), "failed_case_ids": failed_case_ids,
-                          "report": f"{tool_name}/logs/test-report.log"},
-                         ensure_ascii=False, separators=(",", ":")), flush=True)
-    return all_passed
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tool", required=True, help="Project tool folder name")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--input", help="JSON object of named tool arguments")
-    mode.add_argument("--cases", type=Path)
-    parser.add_argument("--summary", action="store_true", help="Emit one test summary; complete records remain in logs/test-report.log")
-    parser.add_argument("--log", type=Path, help="Selected tool test-report.log (tests only)")
+    parser.add_argument("--input", help="JSON object of named tool arguments")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
     parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
@@ -516,11 +419,7 @@ def main():
     directory, _ = resolve_tool(args.tool)
     if not math.isfinite(args.timeout) or not 0 < args.timeout <= 300:
         parser.error("--timeout must be greater than zero and at most 300 seconds")
-    if args.summary and (not args.cases or args.worker):
-        parser.error("--summary requires --cases and cannot be used by workers")
-    if args.log and not args.cases:
-        parser.error("--log requires --cases")
-    if args.rerun and (args.worker or args.cases or args.input is None):
+    if args.rerun and (args.worker or args.input is None):
         parser.error("--rerun requires production --input")
     if not args.worker:
         logs_directory(directory)
@@ -535,12 +434,7 @@ def main():
     resolve_tool(args.tool)
     if args.worker:
         payload = json.load(sys.stdin)
-        worker(args.tool, payload["input"], payload["expected"], payload["run_id"])
-    elif args.cases:
-        passed = run_tests(args.tool, args.cases.resolve(),
-                           (args.log or directory / "logs" / "test-report.log").resolve(), timeout=args.timeout, summary=args.summary)
-        if not passed:
-            parser.exit(1)
+        worker(args.tool, payload["input"], payload["run_id"])
     elif args.input is not None:
         value = json.loads(args.input)
         try:
@@ -560,7 +454,7 @@ def main():
             result = invoke(args.tool, value, timeout=args.timeout, rerun=True)
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     else:
-        parser.error("Supply --input JSON, or --cases PATH")
+        parser.error("Supply --input JSON")
 
 
 if __name__ == "__main__":

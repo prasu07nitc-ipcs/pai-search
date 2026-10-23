@@ -25,25 +25,20 @@ all required context. There is no automatic tool chaining or environment repair.
 tools/
 ├── AGENTS.md                    Project-wide policies and contracts
 ├── README.md                    Architecture and usage
-├── runner.py                    Shared execution and test harness
-├── test_runner.py               Runner regression tests
+├── runner.py                    Shared production execution runner
 ├── .venv/                       Required project Python environment
 └── tool-webpage-og-crawler/
     ├── TOOL.md                  Discovery information and entry point
     ├── AGENTS.md                Detailed tool instructions and contract
     ├── tool.py                  Domain implementation
-    ├── validator.py             Required tool-specific test validator
-    ├── test-cases.json           Test inputs and expectations
     ├── output/                  Execution payloads (<run_id>.txt)
     └── logs/
         ├── run.log              Production execution records
-        ├── runner.log           Python diagnostics and function timings
-        └── test-report.log      Detailed test results
+        └── runner.log           Python diagnostics and function timings
 ```
 
 Every tool directory must be named `tool-<name>` in lowercase kebab-case, with
-the complete name under 64 characters. `TOOL.md`, `AGENTS.md`, `tool.py`, and
-`validator.py` are required. Additional supporting files are added only when
+the complete name under 64 characters. `TOOL.md`, `AGENTS.md`, and `tool.py` are required. Additional supporting files are added only when
 needed. Log files are created as their corresponding execution paths are used.
 
 ## Execution architecture
@@ -58,12 +53,9 @@ flowchart TD
     F --> G[Import tool and validate resolved parameter types]
     G --> H[Execute declared tool function]
     H --> I[Validate shared output contract]
-    I --> J{Test invocation?}
-    J -->|Yes| K[Run validator.py against expectations]
-    J -->|No| L[Return JSON to parent]
-    K --> L
+    I --> L[Return JSON to parent]
     L --> M[Parent persists results and worker diagnostics]
-    M --> N[Emit result or test record on stdout]
+    M --> N[Emit result on stdout]
 ```
 
 ### Parent runner
@@ -163,34 +155,10 @@ failures. Production logs record `runner_timeout` or `runner_error` when applica
 with `output` set to null if no accepted result is available. Pre-execution
 argument rejection does not create a production execution record.
 
-### Validator interface
-
-Every tool must include `validator.py` defining this exact interface:
-
-```python
-def check_result(value: dict, actual: dict, expected: dict) -> list[str]:
-```
-
-| Argument | Meaning |
-| --- | --- |
-| `value` | Supplied tool input object |
-| `actual` | Complete returned output object |
-| `expected` | Test case expectations |
-
-The function returns descriptive failure messages, or an empty list when all
-checks pass. It owns tool-specific output and expectation checks. It must not
-mutate arguments, make network requests, write files, modify the environment, or
-launch subprocesses. It may read its own <run_id>.txt to validate its content. Supported expectation fields are documented by each tool.
-
-The runner checks the validator's presence and source signature during discovery,
-including production invocations. **It imports and calls the validator only in
-test workers.** Production runs enforce the common output contract; they do not
-run the full tool-specific validator or enforce all annotated return fields.
-
 ## Logging
 
-The parent runner writes production results to `logs/run.log`, test results to
-`logs/test-report.log`, and diagnostics to `logs/runner.log` inside the selected tool's
+The parent runner writes production results to `logs/run.log` and diagnostics
+to `logs/runner.log` inside the selected tool's
 directory. See the [shared logging contract](AGENTS.md#production-logging) for
 record fields, input identifiers, and logging guarantees.
 
@@ -236,65 +204,38 @@ tools/.venv/bin/python -B tools/runner.py \
   --input '{"raw_input":"Extract metadata from https://example.com/","url":"https://example.com/"}'
 ```
 
-Run its test cases:
-
-```sh
-tools/.venv/bin/python -B tools/runner.py \
-  --tool tool-webpage-og-crawler \
-  --cases tools/tool-webpage-og-crawler/test-cases.json
-```
-
 For production inputs, the runner checks the selected tool's `logs/run.log` for a
 previous successful execution of the same supplied input object. Matching uses
 the full input, including `raw_input`, without expanding defaults; object key
 order is ignored. Historical successful records without a run ID are included.
-Failed executions and test records do not trigger confirmation.
+Failed executions do not trigger confirmation.
 
 An interactive terminal asks `Run this input again? [y/N]`; only `y` or `yes`
 proceeds. Non-interactive callers stop with exit code 2 and must ask the user
 before retrying with `--rerun`. API callers likewise receive `DuplicateInputError`
 and can pass `rerun=True` after confirmation. Declining does not execute a worker
 or append a production result record. Confirmed runs retain the normal output
-replacement and append-only logging behavior. Tests do not prompt.
+replacement and append-only logging behavior.
 
 This check uses completed history; simultaneous first executions can both proceed
 before either has recorded success. Unreadable or malformed history stops the
 check rather than silently allowing execution.
 
-Use `--timeout 30`, for example, to change the worker timeout. `--log` is available
-only with `--cases`, and must resolve to the selected tool's `logs/test-report.log`.
+Use `--timeout 30`, for example, to change the worker timeout.
 The internal `--worker` mode is for runner orchestration.
-
-A test-case file is an array of objects containing `case_id`, `input`, and
-`expected`. The shared runner checks an expected `status`; the selected validator
-checks tool-specific expectations. Test records appear on stdout and in
-`logs/test-report.log`. **Inspect each record's `passed` field.** The CLI exits 1 if any assertion or
-execution fails, and 0 only when every case passes.
-
-Run infrastructure regression tests through the project interpreter:
-
-```sh
-tools/.venv/bin/python -B tools/test_runner.py
-```
-
-These infrastructure tests exercise runner behavior using mocks and do not import
-project tool implementations. Actual tool tests execute through the runner and
-its sandboxed workers.
 
 ## Adding or updating a tool
 
 Tool creation and modification require an explicit user request. Within that
 authorized scope:
 
-1. Create or update the correctly named tool directory and its four required files.
+1. Create or update the correctly named tool directory and its three required files.
 2. Declare the capability and entry point in `TOOL.md` and the full self-contained
    contract in the tool's `AGENTS.md`.
 3. Implement typed inputs, semantic validation, structured results, and the shared
    six-field envelope in `tool.py`.
-4. Implement the required validator and document its expectation fields. Add
-   supporting test cases where needed.
-5. Check naming, links, interfaces, permissions, and documentation consistency.
-   Run applicable tests only through the project environment and runner.
+4. Check naming, links, interfaces, permissions, and documentation consistency.
+   Validate runtime behavior only through the project environment and runner.
 
 A conforming new tool should not require adding its name, input fields, or output
 schema to `runner.py`. The shared runner depends on project conventions and the
@@ -317,11 +258,3 @@ records may still reference the former `outputs/` paths.
 
 Transport JSON and result log records use compact separators. Nested type checks
 retain strict validation while recording one aggregate timing per operation.
-The `run_tests` API returns a boolean indicating whether every case passed.
-
-For agent or CI invocations, add `--summary` to `--cases` to emit one compact object
-with tool, status, total/passed/failed counts, failed case IDs, and the relative
-report path. Complete per-case records still append to `logs/test-report.log`.
-It does not change validation, persistence, or the failing exit code. Without this
-flag, stdout retains the complete per-case records. Production output stays the
-six-field result envelope.

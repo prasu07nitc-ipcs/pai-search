@@ -8,18 +8,16 @@ Workers may write only in their validated tool-local output/ directory, and cann
 fork/exec or mutate the environment. The parent validates/prepares output/ and
 owns all log writes; this module does not implement sandbox enforcement.
 
-The parent writes production results to logs/run.log, test results to
-logs/test-report.log, and diagnostics/timing to logs/runner.log under this tool.
-Record formats and run-ID rules: tools/AGENTS.md#production-logging. Tests use
-UUIDs; production IDs hash supplied input. The runner supplies PROJECT_TOOL_RUN_ID
-before import. Historical logs and outputs are not rewritten automatically.
+The parent writes production results to logs/run.log and diagnostics/timing to
+logs/runner.log under this tool. Record formats and run-ID rules:
+tools/AGENTS.md#production-logging. Production IDs hash supplied input. The runner
+supplies PROJECT_TOOL_RUN_ID before import. Historical logs and outputs are not
+rewritten automatically.
 
-From the parent project directory containing tools/, select this tool with the
-absolute project interpreter and runner paths. --input accepts named JSON
-arguments; --cases accepts this tool's test-cases.json. --summary emits compact
-test counts; inspect failed cases (CLI exit 1), not just process completion.
-The runner loads validator.py only for tests and enforces the production envelope
-without loading test code. Do not install/repair dependencies during execution.
+From the parent project directory containing tools/, select this tool using
+tools/.venv/bin/python -B tools/runner.py --tool <tool-name>.
+--input accepts named JSON arguments. The runner enforces the production result
+envelope. Do not install/repair dependencies during execution.
 
 Select --tool tool-webpage-markdown --timeout 60, especially for compare mode.
 Requires Python 3.11+ and Trafilatura >=2.0,<3.0 in tools/.venv. The dependency
@@ -283,11 +281,11 @@ def _extract_markdown(
 
 def _write_output(content: str) -> str:
     """Atomically replace <run_id>.md using a pinned tool-local directory."""
-    # Runner-supplied IDs allow SHA-256 production inputs and UUID test runs.
+    # Runner-supplied IDs are SHA-256 hashes of production inputs.
     # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
     run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
-    if re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+    if re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
         raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
     filename = f"{run_id}.md"
     descriptor = None

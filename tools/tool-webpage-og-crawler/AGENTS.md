@@ -35,7 +35,7 @@ each a string or null:
 
 `page_id` hashes the exact saved `url` string, with no additional URL normalization
 or fallback to the requested or final fetch URL. It is separate from the runner's
-input-based run ID. The validator checks this relationship on every successful test.
+input-based run ID.
 
 Missing metadata is null and does not make a fetch fail. Text values are trimmed
 and HTML entities decoded; relative URLs are preserved. Dates are normalized as
@@ -70,12 +70,6 @@ applied, otherwise empty). Before successful extraction this object is empty.
 Diagnostics remain in the result envelope/log; the saved payload retains its
 existing field set. Downstream consumers requiring provenance must also inspect
 these diagnostics. Existing output files and logs are not migrated.
-
-The read-only validator supports `normalization_cases` for offline normalization
-fixtures in addition to `parser_cases`, `error_code`, `required_properties`,
-`property_values`, `required_metadata`, and `metadata_values`. Run regression
-cases with the existing tools runtime and runner; test records are separate from
-production logs.
 
 The tool does not render JavaScript, fetch images, infer article content, or guess
 missing metadata. Output files from different run IDs are retained; the same run
