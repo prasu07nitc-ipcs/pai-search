@@ -243,6 +243,11 @@ common contract, while domain behavior stays inside the tool directory.
 
 ## Current tools
 
+[tool-url-validate](tool-url-validate/TOOL.md) extracts the first structurally valid
+HTTP(S) URL from `raw_input` without network access and saves it as plain text. It is
+the validation gate before task-index-web-page extraction.
+
+
 [tool-webpage-og-crawler](tool-webpage-og-crawler/TOOL.md) fetches a public HTTP(S)
 page and extracts five Open Graph properties, `keywords`, `datePublished`, and
 `dateModified`. It owns URL validation, public-address checks, redirects, response
