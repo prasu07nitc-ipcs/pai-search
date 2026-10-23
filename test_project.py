@@ -41,13 +41,14 @@ def check_contracts():
     for task in tasks:
         if task.is_symlink() or not task.is_dir() or len(task.name) >= 64 or not re.fullmatch(r'task-[a-z0-9]+(?:-[a-z0-9]+)*', task.name):
             raise ValueError(f'Invalid task directory: {task.name}')
-        for name in ('TASK.md', 'AGENTS.md'):
+        for name in ('TASK.md', 'INPUT.md', 'AGENTS.md'):
             path = task / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError(f'Missing regular file: {task.name}/{name}')
         entry = (task / 'TASK.md').read_text()
         instructions = (task / 'AGENTS.md').read_text()
-        if not entry.startswith(f'# {task.name}\n') or '](AGENTS.md)' not in entry:
+        if (not entry.startswith(f'# {task.name}\n') or '](AGENTS.md)' not in entry
+                or '](INPUT.md)' not in entry or '](INPUT.md)' not in instructions):
             raise ValueError(f'Invalid task discovery contract: {task.name}')
         for section in sections:
             if f'\n## {section}\n' not in instructions:

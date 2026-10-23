@@ -1,6 +1,7 @@
 # task-index-web-page
 
-Collect a URL and Bookmark/Read/Index selections. Extract metadata for any
+Accept a URL and Bookmark/Read/Index selections through the [input contract](INPUT.md).
+Normalize JSON, Markdown, or plain text and validate before processing. Extract metadata for any
 selection, and Markdown for Index or Read. Index enables context encoding; Read
 enables article writing only after both extractions succeed. Required extraction
 branches run concurrently. Save selected results through tx-bookmark, tx-index,
@@ -10,7 +11,6 @@ and tx-save-article using the saved producer output files.
 
 | Component | Required when | Purpose |
 | --- | --- | --- |
-| [form-url](../../forms/form-url/AGENTS.md) | Always | Collect the URL and Bookmark/Read/Index selections |
 | [tool-webpage-og-crawler](../../tools/tool-webpage-og-crawler/AGENTS.md) | Any selection enabled | Extract webpage metadata |
 | [tool-webpage-markdown](../../tools/tool-webpage-markdown/AGENTS.md) | Index or Read selected | Extract webpage Markdown |
 | [skill-context-encoder](../../skills/skill-context-encoder/SKILL.md) | Index selected and Markdown extraction succeeds | Encode Markdown into entity context |
@@ -21,12 +21,11 @@ and tx-save-article using the saved producer output files.
 
 | Runtime dependency | Purpose |
 | --- | --- |
-| Forms server, `forms/.venv`, and `forms/runner.py` | Serve the URL form and persist its session |
 | Tools runtime, `tools/.venv`, and `tools/runner.py` | Execute the selected extraction tools |
 | Transactions runtime, `transactions/.venv`, and `transactions/runner.py` | Persist selected results within transaction-owned data directories |
 | Existing skill cache, validation, and persistence infrastructure | Validate, reuse, and save encoder and article results |
 | Writable task-local `checkpoints/`, `output/`, and `logs/` storage | Persist recovery checkpoints, component output maps, and finished-attempt logs |
-| Active agent session and browser access | Orchestrate execution and allow form submission |
+| Active agent session | Validate input and orchestrate execution |
 
 When both extractions are required, the tools run concurrently. The encoder
 requires Index and successful Markdown extraction. The article writer requires
@@ -36,6 +35,7 @@ transactions while independent branches retain their results.
 
 ## Instructions
 
+- [Input contract](INPUT.md)
 - [Complete task instructions](AGENTS.md)
 - [Execution procedure](AGENTS.md#execution-procedure)
 - [Workflow diagram](AGENTS.md#workflow-diagram)

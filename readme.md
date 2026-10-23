@@ -8,7 +8,7 @@ Local tools, browser forms, context skills, and agent-executed resumable tasks w
 | Transactions | [Transactions](transactions/README.md) | [Transactions policy](transactions/AGENTS.md) | Persistent files under exclusively owned `data/<transaction_name>/` destinations; tx-bookmark; execution logs under the transaction directory |
 | Forms | [Forms](forms/README.md) | Form-local `AGENTS.md` | `output/<execution_id>.txt`, `logs/` |
 | Skills | `skills/skill-*/SKILL.md` | Skill-local `AGENTS.md` | `input/<run_id>.txt`, `output/<run_id>.txt`, `logs/run.log`; Markdown execution entry |
-| Tasks | [Tasks](tasks/README.md), `tasks/task-*/TASK.md` | Task-local `AGENTS.md` with procedure, workflow diagram, and recovery | Run checkpoints in `checkpoints/<run_id>.json`, component output maps in `output/<run_id>.json`, and append-only `logs/run.log` per task |
+| Tasks | [Tasks](tasks/README.md), `tasks/task-*/TASK.md` | Task-local `INPUT.md` for validation and `AGENTS.md` with procedure, workflow diagram, and recovery | Run checkpoints in `checkpoints/<run_id>.json`, component output maps in `output/<run_id>.json`, and append-only `logs/run.log` per task |
 
 Read only the selected entry point and its instructions. Tools and forms share a
 six-field result envelope; skills retain their own documented output schemas.
