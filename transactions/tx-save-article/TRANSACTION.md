@@ -1,8 +1,8 @@
 Name: tx-save-article
 
-Description: Validate the input files belong to the tool-webpage-og-crawler and skill-article-writer output folders, then read their JSON page_id and Markdown, verify the SHA-256 identity of a Markdown article's linked title URL, append its source page ID, and atomically save it in data/articles/<domain_with_underscores>/<page_id>.md. Saving here means local persistence.
+Description: Read a supplied Markdown article file from any absolute or repository-relative path, verify its linked title URL against the supplied page_id, save article.md and meta.md under data/articles/<domain>/<page_id>/. Metadata contains references, source page ID, and the source code signature; each file is replaced atomically. Saving here means local persistence.
 
-Entry point: `transaction.py:save_article(page_id_file: str, article_file: str, raw_input: str) -> dict`
+Entry point: `transaction.py:save_article(page_id: str, article_file: str) -> dict`
 
 Instructions: [AGENTS.md](AGENTS.md)
 

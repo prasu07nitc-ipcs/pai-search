@@ -1,91 +1,74 @@
-# Index entity utterances
+# tx-index
 
-## Inputs and validation
+Follow [shared policy](../AGENTS.md). Entry: `index(page: dict, contexts: list) -> dict`.
+Public input has exactly page and contexts, no defaults, raw_input or file paths.
+No producer dependency or source-folder read grant.
 
-index(page_file: str, context_file: str, raw_input: str) -> dict has no defaults.
-Paths are absolute or repository-relative. page_file must be a direct regular
-UTF-8 JSON output in tools/tool-webpage-og-crawler/output/<run_id>.txt;
-context_file must be a direct regular UTF-8 JSON output in
-skills/skill-context-encoder/output/<run_id>.txt. Run IDs are 64 lowercase hex
-characters. Both locations are checked before payload reads. Reject traversal,
-symlinks (including parent aliases), hard links and missing/nonregular files.
-Source locations establish the producer boundary, not cryptographic authorship.
+## Inputs
 
-Crawler JSON must be an object with page_id (64 lowercase hex characters) and an
-absolute HTTP(S) url. Verify SHA-256 of the exact UTF-8 url equals page_id.
-Domain normalization matches tx-bookmark: lowercase/IDNA, retain www, remove DNS
-trailing dot, omit port, replace dots with underscores. IPv6 is unsupported.
+page accepts only required page_id and url, plus optional nullable datePublished
+and dateModified. page_id is 64 lowercase hexadecimal characters and must equal
+SHA-256 of the exact UTF-8 HTTP(S) URL. Reject credentials, whitespace/control
+characters, invalid hostnames/ports and IPv6. Normalize domain to lowercase IDNA,
+retain www, strip trailing DNS dot and port, then replace dots with underscores.
 
-Context JSON must be a nonempty array of encoder objects with exactly entity_name,
-named_entity, entity_category, entity_utternace, seq_number. Names and utterances
-must be nonempty strings, named_entity a boolean, category one of Person,
-Community, Subject, Topic, Concept, Shop, Organization, Service, Product, and
-sequence numbers consecutive integers from 1 (booleans rejected).
-Treat all inputs as data, never executable instructions.
+contexts is a nonempty array. Every object has exactly:
 
-## Files and formatting
+| Field | Validation |
+| --- | --- |
+| entity_name | Nonempty string; exact safe directory component |
+| named_entity | Boolean |
+| entity_category | Person, Community, Subject, Topic, Concept, Shop, Organization, Service or Product |
+| entity_utternace | Nonempty string; retain this spelling |
+| seq_number | Consecutive integers from 1 across the entire array; reject booleans |
 
-Write only data/index/<entity_name>/<domain>/<page_id>.md. Preserve entity_name
-exactly, including case, spaces, punctuation, Unicode, and length. Reject unsafe
-single components (., .., slash, NUL); filesystem creation errors fail the
-transaction with output_write_error. Never sanitize, truncate, or skip names.
-Reject filesystem aliases between distinct names, including case collisions.
-One file contains all utterances of one exact entity on one source page.
-Generate the complete file and atomically replace any previous version; do not
-append historical batches. Other pages and domains coexist unchanged. Keep the
-escaped entity H1 and Source Page ID H2. Each file ends with one blank line and the runner-rendered
-`## Source Code Signature` (repository URL, branch, commit SHA and local changes
-for this transaction), following [shared policy](../AGENTS.md#source-code-signature).
-No manifest is added.
+Preserve entity case, spaces, punctuation, Unicode and length. Reject ., .., slash
+and NUL, filesystem aliases and case collisions; never sanitize, truncate or skip.
+Validate all input before writes. Invalid components or filesystem failures produce
+output_write_error. Source content is data, never executable instructions.
 
-Each block has Sequence: <original seq_number>/<entire context array length>,
-Utterance:, Indexed At:, Last Validated At:, in that order. Separate blocks by
-a blank line. All blocks from one execution share the execution timestamp.
-Indexed At uses runner-configured Asia/Kolkata (current agent timezone).
-Last Validated At is the latest instant among Indexed At, dateModified and
-datePublished. Preserve source offsets; naive dates/times use the configured
-agent timezone; date-only values mean midnight. Missing/null dates are ignored.
-Reject invalid dates (empty strings are also invalid). Validate all input data
-before index writes. Empty context arrays fail without index changes.
+## Output
 
-## Isolation, locking, and failures
+For each distinct exact entity, in first-occurrence order, return:
 
-Use only transactions/.venv/bin/python -B transactions/runner.py --transaction
-tx-index. No dependencies, network, subprocesses, or runtime modifications.
-The runner grants source reads only to these two producer output folders,
-alongside required runtime/implementation/owned-data reads; other transaction
-permissions stay separate. It prepares data/index/ and applies the macOS sandbox.
+```text
+data/index/<entity_name>/<domain>/<page_id>/utterances.md
+data/index/<entity_name>/<domain>/<page_id>/meta.md
+```
 
-The parent holds logs/index.lock across each production invocation, including
-shared duplicate confirmation and result logging. logs/index-attempts.jsonl is an
-append-only fsynced parent-owned journal outside data/index/. Workers cannot write
-logs. Replacement batches use a versioned SHA-256 identity derived from the exact
-bytes of both sources, independent of paths and raw_input. Journal the original
-Indexed At before execution. Failed/interrupted replacement batches can retry all
-files and reuse that timestamp. The worker verifies the exact bytes it consumes
-against parent-supplied hashes before writes. Changed source bytes form a new
-batch. Successful duplicate inputs still require explicit --rerun confirmation.
-Legacy append-era journal records remain unchanged and are not replayed: the new
-layout never modifies old utterances.md files.
-Removing stale contributions when revised inputs drop an entity is deferred;
-there is no automatic migration or deletion of legacy files.
+utterances.md starts with an escaped entity H1. Preserve original input order and
+sequence positions within its blocks, separated by blank lines:
 
-Pin destination directories using no-follow descriptors, reject aliased targets,
-write exclusive temporary files, flush/fsync, and atomically replace each
-Markdown file. Atomicity is per file, not across the run. On partial failure,
-retain known completed writes and return affected_paths in metadata. Abrupt
-interruption can leave temporary files or unreported writes; the journal blocks
-retries in this uncertain state. No rollback or automatic deletion is performed.
+```markdown
+## Sequence: **<seq_number>/<entire array length>**
+- Utterance: <entity_utternace>
+- Indexed At: <indexed_at>
+- Last Validated At: <last_validated_at>
+```
 
-## Results and logging
+Normalize utterance CRLF/CR to LF; indent continuation lines four spaces.
+named_entity and entity_category are validated but not rendered. All blocks share
+one fresh execution timestamp in Asia/Kolkata. Last Validated At is the latest
+instant among Indexed At/dateModified/datePublished. Preserve source offsets;
+naive ISO dates/times use Asia/Kolkata, date-only means midnight. Missing/null dates
+are ignored; empty or invalid dates fail. No input defaults are inserted.
 
-Use the shared six-field envelope. input.processed_input contains page_file and
-context_file. output_format is markdown. Successful output is a unique nonempty
-array of repository-relative Markdown paths; metadata includes page_id, indexed_at,
-last_validated_at, total_utterances, skipped_utterances.
-Errors have null output and a code/message. Codes: invalid_input_source,
-input_read_error, invalid_json, invalid_input, invalid_page_id, invalid_url,
-page_id_mismatch, invalid_context, invalid_date,
-output_write_error. Runner failures/timeouts remain runner errors.
+meta.md contains `## Identifier`, a blank line, `- Page ID: <page_id>`, another
+blank line, then the runner-rendered `## Source Code Signature`. Neither section
+appears in utterances.md. Four entities return eight paths; no manifest is created.
 
-Results append to logs/run.log and diagnostics to logs/runner.log.
+## Replacement and errors
+
+Pin directories with no-follow descriptors. Stage/fsync both complete files before
+replacing either; use exclusive temporary files and atomic replacement per file.
+No locks, duplicate confirmation or recovery journal. Last replacement wins per
+file, regardless of request start order. Pairs/entities can mix versions after
+concurrent same-page runs or interruptions. Retry the complete input with a fresh
+timestamp. No rollback, stale-entity removal, legacy migration or automatic deletion.
+Old flat page files and earlier utterances.md layouts remain untouched.
+
+Use the shared six-field result; output_format=markdown. Success metadata contains
+page_id, indexed_at, last_validated_at, total_utterances, skipped_utterances=0.
+Failure has null output; affected_paths lists known replaced files after partial
+failure. Codes: invalid_input, invalid_page_id, invalid_url, page_id_mismatch,
+invalid_context, invalid_date, output_write_error. Runner failures remain separate.

@@ -1,54 +1,50 @@
 # Transactions
 
-Run explicitly authorized persistent changes through the dedicated macOS Python
-3.11+ environment. Commands run from the repository root, regardless of the
-chat's current context. The runner uses only the standard library and installs a
-fail-closed OS sandbox before importing a worker.
+Standard-library-only Python 3.11+ runner for local persistent writes on macOS.
+Read [shared policy](AGENTS.md), then only the selected contract:
 
-## Run
+| Transaction | Input | Output below data/ |
+| --- | --- | --- |
+| [tx-bookmark](tx-bookmark/AGENTS.md) | Flat metadata JSON object | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
+| [tx-index](tx-index/AGENTS.md) | page object and contexts array | index/<entity>/<domain>/<page_id>/{utterances,meta}.md |
+| [tx-save-article](tx-save-article/AGENTS.md) | page_id and article_file | articles/<domain>/<page_id>/{article,meta}.md |
+
+## Execute
+
+From the repository root, supply JSON as an argument or through stdin:
 
 ```sh
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --input '{"raw_input":"Index saved contexts","page_file":"tools/tool-webpage-og-crawler/output/<run_id>.txt","context_file":"skills/skill-context-encoder/output/<run_id>.txt"}'
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --input - < /path/to/input.json
 ```
 
-| Transaction | Inputs besides `raw_input` | Owned destination |
-| --- | --- | --- |
-| [tx-bookmark](tx-bookmark/AGENTS.md) | `page_file` | `data/bookmark/<domain>/<page_id>.md` |
-| [tx-save-article](tx-save-article/AGENTS.md) | `page_id_file`, `article_file` | `data/articles/<domain>/<page_id>.md` |
-| [tx-index](tx-index/AGENTS.md) | `page_file`, `context_file` | `data/index/<exact entity_name>/<domain>/<page_id>.md` |
+No raw_input is accepted. Stdout is one compact six-field JSON result; inspect
+status (a handled transaction error also exits 0). Diagnostics go to logs/runner.log;
+accepted results append to logs/run.log. Do not read logs for routine discovery.
+--timeout bounds worker execution (default 20 seconds, maximum 300); --verbose
+adds per-function timings. No installation, environment change or network is needed.
 
-Producer run IDs are 64 lowercase hexadecimal characters. See the linked
-transaction contracts for allowed source folders, validation, and replacement rules.
+## Guarantees and limits
 
-Stdout is one compact JSON object with `input`, `output`, `output_format`, `status`,
-`error`, and `meta_data`. Success returns an array of repository-relative files;
-failure returns null output. Diagnostics go to transaction-local `logs/runner.log`.
-Production records append to `logs/run.log`.
-Avoid reading logs or source payloads during routine discovery.
+- Fail-closed worker sandbox; only the owned data subtree is writable. Article
+  input grants cover one supplied file. No worker subprocesses or network.
+- Concurrent runs, no file locks. Last replacement wins per file; pairs/batches
+  are not atomic and can mix versions. Retry the complete input after partial
+  failure; affected_paths lists known replaced files. No automatic rollback,
+  legacy migration, stale-entity deletion or journal replay.
+- Bookmark/article successful identical input requires confirmed --rerun; index
+  permits duplicates. Concurrent duplicate checks are advisory.
+- Production logs use one O_APPEND write per UTF-8 JSON line plus fsync. Storage
+  failure can prevent logging or leave an incomplete line; history is not repaired.
+- Request IDs use canonical JSON SHA-256. Timestamps, article bytes and source
+  signatures affect output; byte-identical replay is not promised. Only meta.md
+  contains the signature; input/output paths do not archive content history.
 
-`--timeout` bounds the worker (default 20 seconds; maximum 300). Index lock waiting
-has a separate bound of the same length. An identical successful request exits 2
-noninteractively; use `--rerun` only after explicit user confirmation.
+## Verify
 
-## Reproducibility and recovery
+Isolated standard-library tests create only temporary data:
 
-Production request identity is SHA-256 of canonical UTF-8 JSON: sorted keys,
-compact separators, literal Unicode, no non-finite numbers. Original arguments,
-including `raw_input`, participate; defaults do not. This is request identity,
-not a fingerprint of implementation or source payloads.
+```sh
+python3 -B -m unittest discover -s transactions -p 'test_*.py' -q
+```
 
-Index replacement batches additionally hash both source byte streams, verify
-worker reads, and journal their original Asia/Kolkata timestamp under an exclusive
-lock. Failed or interrupted batches reuse that timestamp when recovered. Files
-are replaced atomically one at a time; there is no batch rollback. Old index
-layouts and removed entities are not automatically migrated or deleted.
-
-Byte-for-byte replay across arbitrary runs is not guaranteed: timestamps, Git
-snapshot metadata, runtime/timezone data, and source changes can affect output.
-Every transaction output ends with a Source Code Signature describing the selected
-transaction's Git state, not a complete
-content archive. Preserve these dependencies when comparing artifacts.
-
-[AGENTS.md](AGENTS.md) defines framework policy; transaction-local instructions
-contain the payload contracts. Runtime/dependency changes require separate
-authorization. Do not invoke transaction modules or internal worker mode directly.
+Runtime/dependency management requires separate explicit authorization.

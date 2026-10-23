@@ -5,7 +5,6 @@ and the standard library. No third-party, optional, vendored, or indirect Python
 dependencies. See transactions/AGENTS.md for the authoritative policy.
 """
 from __future__ import annotations
-from zoneinfo import ZoneInfo
 
 import argparse
 import ast
@@ -16,7 +15,6 @@ import re
 import types
 import typing
 import ctypes
-import fcntl
 import hashlib
 import importlib.util
 import json
@@ -88,7 +86,9 @@ def source_code_signature(directory):
                  "commit": "Unavailable", "local_changes": []}
     try:
         root = Path(git("rev-parse", "--show-toplevel").strip())
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        if any((ancestor / ".git").exists() for ancestor in (directory, *directory.parents)):
+            raise ValueError("Cannot capture source signature inside a Git repository.") from exc
         return signature
     # Fail on incomplete snapshots in a Git repository rather than report it clean.
     signature["repository_url"] = repository_http_url(git("config", "--get", "remote.origin.url", allowed=(0, 1)).strip())
@@ -127,7 +127,7 @@ def logs_directory(directory):
     if target.is_symlink():
         raise ValueError("Logs directory must not be a symlink")
     target.mkdir(exist_ok=True)
-    for name in ("run.log", "runner.log", "index.lock", "index-attempts.jsonl"):
+    for name in ("run.log", "runner.log"):
         path = target / name
         if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink != 1)):
             raise ValueError("Logs must be regular, unlinked files")
@@ -140,14 +140,13 @@ class DuplicateInputError(ValueError):
 
 @contextlib.contextmanager
 def production_history(directory):
-    """Read history under a shared lock without creating a result log."""
+    """Read available history without locking or creating a result log."""
     try:
         history = (directory / "logs" / "run.log").open("r", encoding="utf-8")
     except FileNotFoundError:
         yield ()
         return
     with history:
-        fcntl.flock(history, fcntl.LOCK_SH)
         yield history
 
 
@@ -161,7 +160,8 @@ def require_new_input(directory, input_id):
             if record.get("status") != "ok":
                 continue
             supplied = dict(record["processed_input"])
-            supplied["raw_input"] = record["raw_input"]
+            if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") or record["raw_input"] is not None:
+                supplied["raw_input"] = record["raw_input"]
             previous_id = canonical_hash(supplied)
             if previous_id == input_id:
                 raise DuplicateInputError(
@@ -175,7 +175,7 @@ def log_execution(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
         started = time.perf_counter()
-        LOGGER.info("Function %s started", function.__qualname__)
+        LOGGER.debug("Function %s started", function.__qualname__)
         try:
             result = function(*args, **kwargs)
         except BaseException:
@@ -184,7 +184,7 @@ def log_execution(function):
                 function.__qualname__, time.perf_counter() - started,
             )
             raise
-        LOGGER.info(
+        (LOGGER.info if function.__name__ == "_invoke" else LOGGER.debug)(
             "Function %s completed; total execution time: %.6f seconds",
             function.__qualname__, time.perf_counter() - started,
         )
@@ -231,7 +231,7 @@ def validate_input(directory, entry, value):
     """Bind JSON arguments against the source signature without importing transaction code."""
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ValueError("Input must be a JSON object of named arguments.")
-    if not isinstance(value.get("raw_input"), str):
+    if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") and not isinstance(value.get("raw_input"), str):
         raise ValueError("raw_input is a required string.")
     json.dumps(value, allow_nan=False)
     tree = ast.parse((directory / "transaction.py").read_text(encoding="utf-8"))
@@ -250,14 +250,15 @@ def validate_input(directory, entry, value):
     for argument, default in zip(arguments.kwonlyargs, arguments.kw_defaults):
         parameters.append(inspect.Parameter(argument.arg, inspect.Parameter.KEYWORD_ONLY,
                                             default=inspect.Parameter.empty if default is None else None))
-    inspect.Signature(parameters).bind(**value)
+    arguments_value = {"page": value} if directory.name == "tx-bookmark" else value
+    inspect.Signature(parameters).bind(**arguments_value)
     # Primitive annotations can also be checked safely before any import.
     primitives = {"str": str, "int": int, "float": float, "bool": bool, "list": list, "dict": dict}
     for argument in positional + arguments.kwonlyargs:
         if argument.annotation is None:
             raise ValueError(f"Parameter {argument.arg} must have an explicit type annotation.")
-        if argument.arg in value and isinstance(argument.annotation, ast.Name) and argument.annotation.id in primitives:
-            if not matches_type(value[argument.arg], primitives[argument.annotation.id]):
+        if argument.arg in arguments_value and isinstance(argument.annotation, ast.Name) and argument.annotation.id in primitives:
+            if not matches_type(arguments_value[argument.arg], primitives[argument.annotation.id]):
                 raise ValueError(f"Incorrect type for argument {argument.arg}.")
     if function.returns is None:
         raise ValueError("Transaction entry points must declare their return type.")
@@ -304,8 +305,9 @@ def validate_output(result, transaction_name=None, run_id=None):
         raise ValueError("Transaction result requires exactly input, output, output_format, status, error, and meta_data.")
     inputs = result["input"]
     if (not isinstance(inputs, dict) or set(inputs) != {"raw_input", "processed_input"}
-            or not isinstance(inputs["raw_input"], str) or not isinstance(inputs["processed_input"], dict)):
-        raise ValueError("input requires raw_input string and processed_input object.")
+            or not (inputs["raw_input"] is None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else isinstance(inputs["raw_input"], str))
+            or not isinstance(inputs["processed_input"], dict)):
+        raise ValueError("input requires processed_input object and raw_input (null for tx-bookmark, tx-save-article and tx-index, otherwise a string).")
     if not isinstance(result["meta_data"], dict):
         raise ValueError("meta_data must be an object.")
     if not isinstance(result.get("output_format"), str) or not result["output_format"].strip():
@@ -353,7 +355,12 @@ def validate_tree(target):
         for base, directories, files in os.walk(target, followlinks=False):
             for name in directories + files:
                 item = Path(base) / name
-                info = item.lstat()
+                try:
+                    info = item.lstat()
+                except FileNotFoundError:
+                    # Concurrent atomic replacement can remove a scanned temp name.
+                    # Live output targets still receive their own validation below.
+                    continue
                 if stat.S_ISLNK(info.st_mode) or (not stat.S_ISDIR(info.st_mode) and
                         (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1)):
                     raise ValueError("Data aliases and non-regular files are forbidden.")
@@ -366,24 +373,41 @@ def prepare_data(transaction_name, data_root):
         raise ValueError("Data root must be canonical and not a symlink.")
     data_root.mkdir(exist_ok=True)
     target = data_root / owned_data_name(transaction_name)
-    validate_tree(target)
+    if target.is_symlink() or target.resolve() != target:
+        raise ValueError("Owned data directory must be canonical and not a symlink.")
     target.mkdir(exist_ok=True)
-    return validate_tree(target)
+    # The worker performs the full-tree check before sandboxing/import. Avoid
+    # scanning unrelated page files again in the parent and after every result.
+    return target
 
 
 def validate_saved_output(result, transaction_name, destination):
     if result["status"] != "ok":
         return
-    validate_tree(destination)
+    # Verify only returned paths; the worker scans the owned tree before import.
     for output in result["output"]:
         relative = Path(output).relative_to(Path("data") / owned_data_name(transaction_name))
-        target = destination / relative
-        if not target.is_file() or target.is_symlink() or target.stat().st_nlink != 1:
-            raise ValueError("Successful output must identify existing regular owned data files.")
+        descriptor = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            for component in relative.parts[:-1]:
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+            fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=descriptor)
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise ValueError("Successful output must identify regular unlinked owned files.")
+            finally:
+                os.close(fd)
+        finally:
+            os.close(descriptor)
 
 
 @log_execution
-def worker(transaction_name, value, run_id=None, data_directory=None, source_signature=None, index_batch=None):
+def worker(transaction_name, value, run_id=None, data_directory=None, source_signature=None):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
@@ -409,20 +433,16 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
                 Path('/Library/Apple'), Path('/Library/Preferences/SystemConfiguration')]
     rules = ['(version 1)', '(allow default)', '(deny file-read*)', '(allow file-read-metadata)',
              '(deny file-write*)', '(deny process-fork)', '(deny process-exec)',
-             '(deny file-link)']
+             '(deny file-link)', '(deny network*)']
     for path in readable:
         rules.append('(allow file-read* (subpath ' + json.dumps(str(path)) + '))')
-    # Grant each selected transaction only its authorized producer output reads.
-    article_input_root = PROJECT
-    source_components = {
-        "tx-bookmark": ("tools/tool-webpage-og-crawler",),
-        "tx-index": ("tools/tool-webpage-og-crawler", "skills/skill-context-encoder"),
-        "tx-save-article": ("tools/tool-webpage-og-crawler", "skills/skill-article-writer"),
-    }
-    if transaction_name in source_components:
-        for component in source_components[transaction_name]:
-            source = article_input_root / component / "output"
-            rules.append('(allow file-read* (subpath ' + json.dumps(str(source)) + '))')
+    # Only the article transaction needs a caller-selected source file read.
+    if transaction_name == "tx-save-article":
+        # Grant only the caller-selected article, independent of its producer.
+        source = Path(value["article_file"])
+        if not source.is_absolute():
+            source = PROJECT / source
+        rules.append('(allow file-read* (literal ' + json.dumps(str(source.resolve())) + '))')
     if transaction_name == "tx-index":
         zone_file = Path("/usr/share/zoneinfo/Asia/Kolkata").resolve()
         rules.append('(allow file-read* (literal ' + json.dumps(str(zone_file)) + '))')
@@ -470,103 +490,38 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
     os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"] = signature_markdown(source_signature)
     os.environ["PROJECT_TRANSACTION_RUN_ID"] = run_id
     os.environ["PROJECT_TRANSACTION_DATA_DIRECTORY"] = str(outputs)
-    if transaction_name in source_components:
-        os.environ["PROJECT_TRANSACTION_INPUT_ROOT"] = str(article_input_root)
+    if transaction_name == "tx-save-article":
+        os.environ["PROJECT_TRANSACTION_INPUT_ROOT"] = str(PROJECT)
     if transaction_name == "tx-index":
         os.environ["PROJECT_TRANSACTION_TIMEZONE"] = "Asia/Kolkata"
-        if index_batch:
-            os.environ["PROJECT_TRANSACTION_INDEX_HASHES"] = json.dumps(index_batch["hashes"])
-            os.environ["PROJECT_TRANSACTION_INDEXED_AT"] = index_batch["indexed_at"]
     # Keep transaction prints away from the JSON transport on stdout.
     with contextlib.redirect_stdout(sys.stderr):
         module = load_module(directory / "transaction.py", "project_" + transaction_name.replace("-", "_"))
         function = getattr(module, entry)
         signature = inspect.signature(function)
-        bound = signature.bind(**value)
+        call_value = {"page": value} if transaction_name == "tx-bookmark" else value
+        bound = signature.bind(**call_value)
         bound.apply_defaults()
         hints = typing.get_type_hints(function)
         for name, argument in bound.arguments.items():
             if name not in hints or not matches_type(argument, hints[name]):
                 raise ValueError(f"Incorrect type for argument {name}.")
-        result = log_execution(function)(**value)
+        result = log_execution(function)(**call_value)
         validate_output(result, transaction_name, run_id)
         validate_saved_output(result, transaction_name, outputs)
-        if result["input"]["raw_input"] != value["raw_input"]:
+        if result["input"]["raw_input"] != (None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"]):
             raise ValueError("Transaction changed raw_input.")
+        if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") and result["input"]["processed_input"] != value:
+            raise ValueError("Transaction changed supplied input.")
     print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
 def invoke(transaction_name, value, **options):
-    if transaction_name != "tx-index":
-        return _invoke(transaction_name, value, **options)
-    verify_environment()
-    directory, entry = resolve_transaction(transaction_name)
-    validate_input(directory, entry, value)
-    timeout = options.get("timeout", 20)
-    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
-        raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
-    logs_directory(directory)
-    # The parent owns the lock and journal; workers cannot mutate either.
-    with (directory / "logs" / "index.lock").open("a") as lock:
-        deadline = time.monotonic() + timeout
-        while True:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("Timed out waiting for tx-index execution lock.")
-                time.sleep(min(0.05, max(0, deadline - time.monotonic())))
-        sources = []
-        for key in ("page_file", "context_file"):
-            source = Path(value[key])
-            sources.append(str((PROJECT / source).resolve()))
-        hashes = []
-        for source, component in zip(sources, ("tools/tool-webpage-og-crawler", "skills/skill-context-encoder")):
-            path = Path(source)
-            original = Path(value["page_file" if not hashes else "context_file"])
-            original = PROJECT / original
-            if (original != path or '..' in original.parts or path.parent != PROJECT / component / "output"
-                    or re.fullmatch(r"[0-9a-f]{64}\.txt", path.name) is None):
-                raise ValueError("Invalid index source path.")
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            with os.fdopen(fd, "rb") as stream:
-                info = os.fstat(stream.fileno())
-                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                    raise ValueError("Index source must be a regular unaliased file.")
-                hashes.append(hashlib.sha256(stream.read()).hexdigest())
-        identity = hashlib.sha256(json.dumps(["replacement-v1", hashes]).encode()).hexdigest()
-        journal = directory / "logs" / "index-attempts.jsonl"
-        previous = None
-        if journal.exists():
-            for line in journal.read_text(encoding="utf-8").splitlines():
-                record = json.loads(line)
-                if record["identity"] == identity:
-                    previous = record
-        recovering = previous is not None and previous["state"] in ("started", "failed")
-        indexed_at = previous["indexed_at"] if recovering else datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
-        index_batch = {"hashes": hashes, "indexed_at": indexed_at}
-        def record_state(state):
-            with journal.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps({"identity": identity, "sources": sources, "state": state, "indexed_at": indexed_at, "version": "replacement-v1"}) + "\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-        # Check shared successful-input confirmation before recording an attempt.
-        if not options.get("rerun"):
-            input_id = canonical_hash(value)
-            require_new_input(directory, input_id)
-        record_state("started")
-        try:
-            packet = _invoke(transaction_name, value, index_batch=index_batch, **options)
-            record_state("completed" if packet["status"] == "ok" else "failed")
-            return packet
-        except BaseException:
-            record_state("failed")
-            raise
+    return _invoke(transaction_name, value, **options)
 
 
 @log_execution
-def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=None):
+def _invoke(transaction_name, value, *, timeout=20, rerun=False):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
@@ -574,14 +529,14 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=Non
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
     logs_directory(directory)
     input_id = canonical_hash(value)
-    if not rerun and index_batch is None:
+    if not rerun and transaction_name != "tx-index":
         log_execution(require_new_input)(directory, input_id)
     run_id = input_id
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
-        "processed_input": {key: argument for key, argument in value.items() if key != "raw_input"},
-        "raw_input": value["raw_input"], "transaction_input": None,
+        "processed_input": dict(value) if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else {key: argument for key, argument in value.items() if key != "raw_input"},
+        "raw_input": None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"], "transaction_input": None,
         "output": None, "output_format": None,
         "status": "error", "error": None, "meta_data": None,
     }
@@ -590,8 +545,9 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=Non
         outputs = prepare_data(transaction_name, DATA)
         source_signature = source_code_signature(directory)
         completed = subprocess.run(
-            [str(PYTHON), "-B", str(Path(__file__).resolve()), "--transaction", transaction_name, "--worker"],
-            input=json.dumps({"input": value, "run_id": run_id, "data_directory": str(outputs), "source_signature": source_signature, "index_batch": index_batch}), text=True, capture_output=True,
+            [str(PYTHON), "-B", str(Path(__file__).resolve()), "--transaction", transaction_name, "--worker"]
+            + (["--verbose"] if LOGGER.isEnabledFor(logging.DEBUG) else []),
+            input=json.dumps({"input": value, "run_id": run_id, "data_directory": str(outputs), "source_signature": source_signature}, ensure_ascii=False, allow_nan=False, separators=(",", ":")), text=True, encoding="utf-8", capture_output=True,
             cwd=str(PROJECT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr
@@ -599,8 +555,10 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=Non
         result = packet
         validate_output(result, transaction_name, run_id)
         validate_saved_output(result, transaction_name, outputs)
-        if result["input"]["raw_input"] != value["raw_input"]:
+        if result["input"]["raw_input"] != (None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"]):
             raise ValueError("Transaction changed raw_input.")
+        if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") and result["input"]["processed_input"] != value:
+            raise ValueError("Transaction changed supplied input.")
         record.update(
             raw_input=result["input"]["raw_input"],
             transaction_input=result["input"]["processed_input"],
@@ -623,18 +581,32 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=Non
             if isinstance(worker_stderr, bytes):
                 worker_stderr = worker_stderr.decode("utf-8", errors="replace")
             LOGGER.info("Worker diagnostics:\n%s", worker_stderr.rstrip())
-        with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
-            fcntl.flock(log, fcntl.LOCK_EX)
-            log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-            log.flush()
-            os.fsync(log.fileno())
+        append_production_record(directory, record)
+
+
+def append_production_record(directory, record):
+    """Append one complete UTF-8 JSON line in one O_APPEND write, without locks."""
+    payload = (json.dumps(record, ensure_ascii=False, allow_nan=False,
+                          separators=(",", ":")) + "\n").encode("utf-8")
+    descriptor = os.open(directory / "logs" / "run.log",
+                         os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError("Production log must be a regular unlinked file.")
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError("Incomplete production log append.")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--transaction", required=True, help="Project transaction folder name")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--input", help="JSON object of named transaction arguments")
+    parser.add_argument("--input", help="JSON object of named arguments; use - to read UTF-8 JSON from stdin")
+    parser.add_argument("--verbose", action="store_true", help="Record per-function diagnostic timings")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
     parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
@@ -647,19 +619,16 @@ def main():
     if not args.worker:
         logs_directory(directory)
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s [%(process)d] %(name)s: %(message)s",
         handlers=[logging.StreamHandler(sys.stderr) if args.worker else
                   logging.FileHandler(directory / "logs" / "runner.log", mode="a", encoding="utf-8")],
     )
-    # Repeat these checks under logging so their timing is recorded as well.
-    verify_environment()
-    resolve_transaction(args.transaction)
     if args.worker:
         payload = json.load(sys.stdin)
-        worker(args.transaction, payload["input"], payload["run_id"], payload["data_directory"], payload["source_signature"], payload.get("index_batch"))
+        worker(args.transaction, payload["input"], payload["run_id"], payload["data_directory"], payload["source_signature"])
     elif args.input is not None:
-        value = json.loads(args.input)
+        value = json.load(sys.stdin) if args.input == "-" else json.loads(args.input)
         try:
             result = invoke(args.transaction, value, timeout=args.timeout, rerun=args.rerun)
         except DuplicateInputError as exc:
