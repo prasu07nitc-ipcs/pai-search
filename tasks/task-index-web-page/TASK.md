@@ -1,43 +1,30 @@
 # task-index-web-page
 
-Accept a URL and Bookmark/Read/Index selections through the [input contract](INPUT.md).
-Normalize JSON, Markdown, or plain text and validate before processing. Extract metadata for any
-selection, and Markdown for Index or Read. Index enables context encoding; Read
-enables article writing only after both extractions succeed. Required extraction
-branches run concurrently. Save selected results through tx-bookmark, tx-index,
-and tx-save-article using the saved producer output files.
+Orchestrate the component graph in [flowchart.md](flowchart.md). Forward designated
+input unchanged to tool-url-validate. On success, run two extraction tools in parallel,
+then two skills in parallel, then all three transactions in parallel. Every group
+must fully succeed before the next begins. Any failure stops dispatch, preserves
+execution state, forwards the component error/remedy and terminates.
+
+The task agent reads upstream artifacts and assembles downstream inputs according
+to [the wiring table](AGENTS.md#2-wire-inputs). Components own validation and processing.
 
 ## Dependencies
 
-| Component | Required when | Purpose |
-| --- | --- | --- |
-| [tool-webpage-og-crawler](../../tools/tool-webpage-og-crawler/AGENTS.md) | Any selection enabled | Extract webpage metadata |
-| [tool-webpage-markdown](../../tools/tool-webpage-markdown/AGENTS.md) | Index or Read selected | Extract webpage Markdown |
-| [skill-context-encoder](../../skills/skill-context-encoder/SKILL.md) | Index selected and Markdown extraction succeeds | Encode Markdown into entity context |
-| [skill-article-writer](../../skills/skill-article-writer/SKILL.md) | Read selected and both extractions succeed | Write a researched article from metadata and Markdown |
-| [tx-bookmark](../../transactions/tx-bookmark/AGENTS.md) | Bookmark and metadata extraction succeeds | Save bookmark metadata |
-| [tx-index](../../transactions/tx-index/AGENTS.md) | Index and metadata/encoding succeed | Save entity index files |
-| [tx-save-article](../../transactions/tx-save-article/AGENTS.md) | Read and metadata/article writing succeed | Save the article locally |
-
-| Runtime dependency | Purpose |
+| Group | Components |
 | --- | --- |
-| Tools runtime, `tools/.venv`, and `tools/runner.py` | Execute the selected extraction tools |
-| Transactions runtime, `transactions/.venv`, and `transactions/runner.py` | Persist selected results within transaction-owned data directories |
-| Existing skill cache, validation, and persistence infrastructure | Validate, reuse, and save encoder and article results |
-| Writable task-local `checkpoints/`, `output/`, and `logs/` storage | Persist recovery checkpoints, component output maps, and finished-attempt logs |
-| Active agent session | Validate input and orchestrate execution |
+| Validation | [tool-url-validate](../../tools/tool-url-validate/AGENTS.md) |
+| Parallel extraction | [tool-webpage-metadata](../../tools/tool-webpage-metadata/AGENTS.md), [tool-webpage-markdown](../../tools/tool-webpage-markdown/AGENTS.md) |
+| Parallel skills | [skill-context-encoder](../../skills/skill-context-encoder/SKILL.md), [skill-article-writer](../../skills/skill-article-writer/SKILL.md) |
+| Parallel persistence | [tx-bookmark](../../transactions/tx-bookmark/AGENTS.md), [tx-index](../../transactions/tx-index/AGENTS.md), [tx-save-article](../../transactions/tx-save-article/AGENTS.md) |
 
-When both extractions are required, the tools run concurrently. The encoder
-requires Index and successful Markdown extraction. The article writer requires
-Read and successful metadata and Markdown extraction. Each selected branch requires
-its transaction to succeed before task completion; producer failures block dependent
-transactions while independent branches retain their results.
+Use existing tools/transactions runtimes and skill infrastructure. One active
+orchestrator owns task state; two skill agents execute the skill group. No separate
+runner, environment, form, scheduler or remote publication is introduced.
 
 ## Instructions
 
-- [Input contract](INPUT.md)
-- [Complete task instructions](AGENTS.md)
-- [Execution procedure](AGENTS.md#execution-procedure)
-- [Workflow diagram](AGENTS.md#workflow-diagram)
-- [Recovery and cancellation](AGENTS.md#recovery-and-cancellation)
+- [Task instructions and wiring](AGENTS.md)
+- [Workflow diagram](flowchart.md)
+- [Shared orchestration and recovery](../AGENTS.md)
 - [Library and usage](../README.md)

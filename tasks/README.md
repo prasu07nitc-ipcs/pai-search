@@ -1,126 +1,81 @@
 # Tasks
 
-A library of processing tasks executed by a single agent. The agent follows each task's
-instructions, uses existing component runners, and saves checkpoints for resume.
+Tasks orchestrate existing components: read upstream artifacts, assemble declared
+inputs, control parallel groups, route outcomes and retain execution state.
+Components own semantic validation, content processing, research and persistence.
 
 ## Library
 
-- [task-index-web-page](task-index-web-page/TASK.md): accept validated URL/action input, extract
-  selected metadata/Markdown, encode Markdown into entity context for Index, and
-  generate a researched article for Read after both extractions succeed. Persist
-  selected results through tx-bookmark, tx-index, and tx-save-article.
+[task-index-web-page](task-index-web-page/TASK.md) follows this sequence:
+URL validator → parallel metadata/Markdown extraction → parallel context/article
+skills → parallel bookmark/index/article transactions → completion publication.
+Each group must fully succeed before the next starts. See its
+[flowchart](task-index-web-page/flowchart.md) and
+[input wiring](task-index-web-page/AGENTS.md#2-wire-inputs).
 
 ## Use
 
-Ask the agent:
+- "Run task-index-web-page: https://example.com/article"
+- "Show status of task-index-web-page run: <run-id>."
+- "Resume task-index-web-page run: <run-id>."
+- "Cancel task-index-web-page run: <run-id>."
 
-- 'Run task-index-web-page: {"url":"https://example.com/article","bookmark":true,"read":false,"index":true}'
-- "Run task-index-web-page: read only https://example.com/article"
-- "Show the status of task-index-web-page run:`run-id`."
-- "Resume task-index-web-page run: `run-id`."
-- "Cancel task-index-web-page run: `run-id`."
+The task forwards designated input unchanged to the validator; the validator owns
+URL interpretation. Task management does not execute components. One orchestrator
+owns task state; declared skill groups use parallel component agents. Existing tool
+and transaction runners, permissions, cache and duplicate policies remain authoritative.
+No task runner, new environment, form polling or background continuation is created.
 
-Tasks accept user input as JSON, Markdown, or plain text. The agent normalizes
-and validates the selected task's [input contract](task-index-web-page/INPUT.md)
-before processing or creating production state. Omitted bookmark defaults to true
-and omitted index to false; read remains required. Missing required or ambiguous
-fields require clarification; at least one action must be selected. No form, server,
-browser, polling, or submission deadline is required.
-
-Every selection requires metadata; Index or Read requires Markdown. Required
-extraction tools run concurrently. Read enables article writing after both
-succeed. Index enables encoding after Markdown succeeds. One agent orchestrates
-all stages through existing tool and transaction runtimes.
-
-Progress needs an active agent session. If interrupted, ask to resume using the
-saved run ID. Checkpoints do not schedule background continuation. Resume reuses
-validated input and completed stages; uncertain executions require reconciliation.
-Form collection belongs to the [deferred workflows project](../dev-tasks/task-workflows-project.md).
+On failure, stop dispatch, reconcile active siblings, record the outcome and forward
+the component error and supplied remedy. Do not diagnose, repair or retry automatically.
+A saved checkpoint needs an active agent and explicit resume request to continue.
 
 ## Structure
 
 ```text
 tasks/
-  AGENTS.md                     Shared execution and checkpoint rules
-  README.md                     Library and user guide
-  task-index-web-page/
-    INPUT.md                    Canonical input, normalization, and validation
-    TASK.md                     Discovery entry
-    AGENTS.md                   Contract, procedure, diagram, and recovery
-    checkpoints/<run-id>.json          Component execution map
-    output/<run-id>.json        Latest component output map
-    logs/run.log               Append-only finished-attempt entries
+  AGENTS.md                       Shared orchestration and durable-state policy
+  README.md                       Library and usage
+  task-<name>/
+    TASK.md                       Discovery entry
+    AGENTS.md                     Input wiring and orchestration procedure
+    flowchart.md                  Component graph and parallel groups
+    checkpoints/<run-id>.json     Stage map and recovery metadata
+    output/<run-id>.json          Latest finished-attempt output map
+    logs/run.log                  Append-only finished-attempt records
 ```
 
-Add another task by creating task-<name>/TASK.md, INPUT.md, and AGENTS.md. Follow the naming
-and section conventions in the existing task. Keep the complete instructions in
-AGENTS.md so procedure and diagram remain together. Read only the selected task
-and components needed for its current stage.
+Read only the selected task and component contracts needed for the current group.
+Keep shared infrastructure rules in [AGENTS.md](AGENTS.md), task wiring in the
+selected task's AGENTS.md, and graph structure in flowchart.md. Do not duplicate
+component processing instructions in tasks.
 
 ## Persistence and recovery
 
-[Shared policy](AGENTS.md#checkpoints) defines the checkpoint fields and atomic
-write protocol. Component outputs and logs stay in their existing locations;
-checkpoints retain IDs, paths, hashes, decisions, and stage outcomes. Run folders
-are gitignored and may contain private URLs or user input; do not commit them.
+[Shared policy](AGENTS.md) defines identities, stage fields, locks, atomic checkpoints,
+publication and logs. Task state contains IDs, arguments/source references, hashes,
+statuses and recovery details; component payloads stay in component-owned files.
+Only transactions write shared data/. Preserve every returned transaction path.
 
-Resume verifies outputs and reconciles committed component records before retry.
-Successful branches are retained. Encoding requires Index. Read alone extracts metadata and Markdown and writes an
-article, without encoding; Bookmark-only runs skip encoding; no-action input is rejected before execution.
-Bookmark saves metadata in data/bookmark/, Index saves entity files in data/index/,
-and Read saves the generated article in data/articles/. Transactions consume saved
-producer files and perform all shared-data writes. Publication is local only.
+Reuse verified completed stages, reconcile uncertain effects and respect component
+confirmation/cache rules. Parallel siblings may have committed before failure;
+no rollback is implied. Historical records retain their existing scope and format;
+do not migrate them during management. State/logs are private and gitignored.
 
-The existing tool and transaction runtimes remain required. Their environment
-and duplicate-input policies still apply. Transaction stages preserve output
-path arrays and per-file hashes.
-Partial or uncertain mutations require reconciliation before retry. The encoder uses its existing skill
-cache/logging contract directly; no Codex CLI subprocess is launched.
+Status defaults to the latest finished-attempt record, with active checkpoint
+progress distinguished separately. Successful output maps copy all stage fields;
+other outcomes project status/output/output_format. Return task IDs, status and
+artifact links, forwarding any component-required execution entries.
 
 ## Verification
 
-From the repository root, run the existing project checks:
+Check contracts and local documentation links without executing a task:
 
 ```sh
-tools/.venv/bin/python -B test_project.py --sandbox
+tools/.venv/bin/python -B -c 'import test_project; test_project.check_contracts()'
 ```
 
-Task checks validate discovery files, required instruction sections, and local
-Markdown links. They do not execute tasks, submit forms, fetch pages, or create
-production run records. Component regression and sandbox tests remain unchanged.
-
-## Execution outputs and history
-
-Every task follows the [shared output and logging contract](AGENTS.md#execution-log).
-New run IDs hash the original chat session ID and exact triggering input. Each
-finished execution appends one entry with an increasing attempt_seq. Resume and
-authorized rerun retain the ID. A successful run requires user permission before
-rerun; an explicit rerun request counts. No attempt-specific files are created.
-
-After successful completion, the run-specific output JSON copies all component
-stage attributes from the checkpoint into the matching stage: component_type,
-component_name, started_at, completed_at, status, component run_id, stage
-attempt_seq, repository-relative output path, transaction output array (or null), output_format, and error.
-Other finished outcomes include only status, output, and output_format per stage.
-Logs reference this map using
-a task-relative path. Subsequent attempts replace the same map; earlier log
-entries preserve their own outcomes but reference the latest file. Component
-payloads stay in their own files. Status queries default to the latest appended
-entry; explicitly request an attempt or history for earlier outcomes. Active
-checkpoint progress is reported separately from finished execution status.
-
-Production outputs, checkpoints, locks, and logs are private and gitignored.
-Run lock files are removed after successful completion and committed publication.
-Unsuccessful or interrupted runs may retain an unlocked file for later recovery.
-Historical runs are not migrated or backfilled. Instruction-version handling is
-deferred in [the development task](../dev-tasks/task-instruction-version-handling.md).
-
-The checkpoint and a successful output map contain identical component stage
-objects. For other outcomes, the checkpoint retains the additional component
-attributes omitted from the output map. Its component stage IDs match the output
-exactly; the additional top-level
-recovery_meta_data object is excluded from the output map. Stage attempt_seq counts
-component invocations; run.log attempt_seq counts task attempts. Recovery-only
-identity inputs, arguments, validated input, clarifications, artifact hashes, and publication state
-live in recovery_meta_data inside the same checkpoint. Resume reads that single
-file; component state and recovery metadata are updated atomically together. Existing legacy checkpoints are not rewritten during management.
+Full component checks are available through `tools/.venv/bin/python -B test_project.py`;
+`--sandbox` adds the project's sandbox checks. No task production run is needed for
+instruction edits. Workflow input collection and instruction-version handling remain
+deferred; this refactor introduces neither.
