@@ -5,7 +5,9 @@ logs; this module writes only its declared output directory.
 """
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import json
 import os
 from pathlib import Path
 import re
@@ -70,19 +72,20 @@ def _extract_url(raw_input: str) -> str:
 
 
 def validate_url(raw_input: str) -> dict:
-    """Extract the first valid explicit HTTP(S) URL and save it as plain text.
+    """Extract the first valid explicit HTTP(S) URL and save its JSON identity.
 
     Preserve raw_input verbatim; skip invalid candidates and strip surrounding
     prose punctuation. No DNS lookup or network request is performed.
     """
     result = {
         "input": {"raw_input": raw_input, "processed_input": {}},
-        "output": None, "output_format": "text", "status": "error",
+        "output": None, "output_format": "json", "status": "error",
         "error": None, "meta_data": {},
     }
     try:
         url = _extract_url(raw_input)
-        result["output"] = _write_output(url)
+        payload = {"url": url, "page_id": hashlib.sha256(url.encode("utf-8")).hexdigest()}
+        result["output"] = _write_output(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
         result["status"] = "ok"
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}

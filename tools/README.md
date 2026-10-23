@@ -244,7 +244,8 @@ common contract, while domain behavior stays inside the tool directory.
 ## Current tools
 
 [tool-url-validate](tool-url-validate/TOOL.md) extracts the first structurally valid
-HTTP(S) URL from `raw_input` without network access and saves it as plain text. It is
+HTTP(S) URL from `raw_input` without network access and saves JSON containing
+`url` and its SHA-256 `page_id`. It is
 the validation gate before task-index-web-page extraction.
 
 

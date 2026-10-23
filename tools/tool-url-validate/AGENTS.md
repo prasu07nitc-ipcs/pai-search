@@ -13,11 +13,14 @@ safety; downstream fetchers must enforce their own network restrictions.
 
 Uses the [shared result contract](../AGENTS.md#tool-structure-and-contracts).
 `input.raw_input` is preserved, `input.processed_input` and `meta_data` are `{}`,
-and `output_format` is `text`.
+and `output_format` is `json` (including on failure).
 
 On success, `output` points to `tool-url-validate/output/<run_id>.txt`, relative
-to `tools/`. The UTF-8 file contains only the extracted URL, without quotes or a
-trailing newline. Writes are atomic; repeated run IDs replace the same file.
+to `tools/`. The UTF-8 JSON file contains exactly `url` (the exact extracted URL
+string, without further normalization) and `page_id` (the lowercase SHA-256 hex
+digest of that string encoded as UTF-8). This URL identity is distinct from the
+runner's input-based run ID. Writes are atomic; repeated run IDs replace the same file.
+Existing saved outputs and logs are not migrated.
 
 On failure, `output` is null. Error codes are `invalid_url` when no valid URL is
 found and `output_write_error` when saving fails. Existing output is preserved
