@@ -1,8 +1,9 @@
 # Index web page
 
 Follow [shared orchestration policy](../AGENTS.md). Read component contracts only
-for the stages being dispatched. [flowchart.md](flowchart.md) defines execution
-order, parallel groups and failure termination; the mappings below define edge data.
+for the stages being dispatched or the extraction preparation below.
+[flowchart.md](flowchart.md) defines execution order, parallel groups and failure
+termination; the mappings below define edge data.
 
 ## Purpose and scope
 
@@ -44,6 +45,16 @@ and intent before each invocation; checkpoint each returned result. Before launc
 a parallel group, record intent for every member. Read producer artifacts only after
 successful execution and transport/integrity checks; do not revalidate their content.
 
+Before initializing production state or invoking tool-url-validate, read the shared
+tools policy, tool rules, and both extraction tools' contracts; check their required
+files and existing runtime.
+Prepare both runner command templates, timeout settings, and the parallel dispatch
+operation in orchestrator memory. Leave url and page_id unresolved until validation
+succeeds; preparation neither invokes extraction nor marks its stages running.
+Report a missing prerequisite before creating production state. This moves extraction
+preparation out of the validation-to-extraction transition without reading unrelated
+skill or transaction contracts early.
+
 ### 2. Wire inputs
 
 Let V be the parsed JSON artifact returned by validate_url; M the metadata file
@@ -75,8 +86,19 @@ with exact component names, then report each accepted completion/failure with it
 human-readable total invocation time and any still-running siblings. Checkpoint persistence alone is not a user-facing update.
 
 1. Invoke tool-url-validate alone.
-2. After validator success, launch metadata and Markdown tools concurrently; wait
-   for both successful results before dispatching skills.
+2. After validator success, verify and read its output once, retaining V.url and
+   V.page_id unchanged. Assemble and safely serialize both extraction argument
+   objects together from those fields. In one atomic checkpoint replacement, accept
+   the validator result and its recovery metadata and record both extraction stages'
+   exact arguments and launch intent under the shared contract. Only after that
+   save succeeds, dispatch tool-webpage-metadata and tool-webpage-markdown through
+   their existing runners in the same parallel launch operation. Do not wait for
+   either result before launching the other. Issue the required validation completion
+   and extraction launch updates at this transition; do not insert another instruction
+   read, discovery pass, or polling delay before dispatch. Checkpoint each returned
+   extraction result independently, and wait for both successful results before
+   dispatching skills. Any validation, assembly, or checkpoint failure follows failure
+   termination and launches neither extractor.
 3. Launch encode and article in two parallel skill agents. Each agent follows the
    selected SKILL.md, AGENTS.md and shared skills policy, including cache/persistence
    and display requirements. They never write task state. The orchestrator receives
@@ -90,7 +112,7 @@ Use existing runtimes from repository root and safely serialize/shell-quote JSON
 ```sh
 tools/.venv/bin/python -B tools/runner.py --tool tool-url-validate --input '<JSON>'
 tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-metadata --input '<JSON>' --timeout 30
-tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-markdown --input '<JSON>' --timeout 30
+tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-markdown --input '<JSON>' --timeout 60
 transactions/.venv/bin/python -B transactions/runner.py --transaction tx-<name> --input '<JSON>'
 ```
 
@@ -134,6 +156,9 @@ mapping requires explicit clarification, not guessed conversion. No form polling
 - Task logic is limited to wiring, declared input assembly, scheduling, routing,
   checkpoint/recovery infrastructure and forwarding component outcomes.
 - Original validator input and upstream values are preserved.
+- Extraction prerequisites and command templates are prepared before validation;
+  validator acceptance and both extraction launch intents share one atomic checkpoint
+  update, followed immediately by concurrent runner dispatch.
 - Both extractions precede both skills; both skills precede all three transactions.
 - Every group runs in parallel and its full success gates the next group.
 - Components own semantic validation, processing, caching and their output persistence.
