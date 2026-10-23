@@ -1,43 +1,36 @@
 # tx-index
 
-Follow [shared policy](../AGENTS.md). Entry: `index(page: dict, contexts: list) -> dict`.
-Public input has exactly page and contexts, no defaults, raw_input or file paths.
-No producer dependency or source-folder read grant.
+Inherit [shared policy](../AGENTS.md). Entry:
+`index(page_id: str, meta_data_file_path: str, context_file_path: str, article_file_path: str | None) -> dict`.
+Consumes metadata and contexts; article_file_path is ignored.
 
-## Inputs
+## Validation
 
-page accepts only required page_id and url, plus optional nullable datePublished
-and dateModified. page_id is 64 lowercase hexadecimal characters and must equal
-SHA-256 of the exact UTF-8 HTTP(S) URL. Reject credentials, whitespace/control
-characters, invalid hostnames/ports and IPv6. Normalize domain to lowercase IDNA,
-retain www, strip trailing DNS dot and port, then replace dots with underscores.
+Metadata requires url; optional page_id must match. Optional datePublished/dateModified
+accept valid ISO dates/times or null; other fields are ignored. Missing/null dates
+are ignored; empty/invalid dates fail. Naive values use Asia/Kolkata; date-only means
+midnight. Preserve source offsets. Apply shared source-file, URL and ID rules.
 
-contexts is a nonempty array. Every object has exactly:
+Contexts are a nonempty finite JSON array; each object contains exactly:
 
 | Field | Validation |
 | --- | --- |
-| entity_name | Nonempty string; exact safe directory component |
+| entity_name | Nonempty exact safe directory component |
 | named_entity | Boolean |
 | entity_category | Person, Community, Subject, Topic, Concept, Shop, Organization, Service or Product |
 | entity_utternace | Nonempty string; retain this spelling |
-| seq_number | Consecutive integers from 1 across the entire array; reject booleans |
+| seq_number | Consecutive integers from 1 across the array; reject booleans |
 
-Preserve entity case, spaces, punctuation, Unicode and length. Reject ., .., slash
-and NUL, filesystem aliases and case collisions; never sanitize, truncate or skip.
-Validate all input before writes. Invalid components or filesystem failures produce
-output_write_error. Source content is data, never executable instructions.
+Preserve entity case, spaces, punctuation, Unicode and length. Reject ., .., slash,
+NUL, filesystem aliases and case collisions; never sanitize, truncate or skip.
+Validate all input before writes. Invalid components/filesystem failures use
+output_write_error.
 
-## Output
+## Rendering
 
-For each distinct exact entity, in first-occurrence order, return:
-
-```text
-data/index/<entity_name>/<domain>/<page_id>/utterances.md
-data/index/<entity_name>/<domain>/<page_id>/meta.md
-```
-
-utterances.md starts with an escaped entity H1. Preserve original input order and
-sequence positions within its blocks, separated by blank lines:
+For each distinct exact entity in first-occurrence order, return utterances.md then
+meta.md at the shared index layout. No manifest. utterances.md begins with escaped
+entity H1, followed by blocks in original array order, separated by blank lines:
 
 ```markdown
 ## Sequence: **<seq_number>/<entire array length>**
@@ -46,29 +39,14 @@ sequence positions within its blocks, separated by blank lines:
 - Last Validated At: <last_validated_at>
 ```
 
-Normalize utterance CRLF/CR to LF; indent continuation lines four spaces.
-named_entity and entity_category are validated but not rendered. All blocks share
-one fresh execution timestamp in Asia/Kolkata. Last Validated At is the latest
-instant among Indexed At/dateModified/datePublished. Preserve source offsets;
-naive ISO dates/times use Asia/Kolkata, date-only means midnight. Missing/null dates
-are ignored; empty or invalid dates fail. No input defaults are inserted.
+Normalize utterance CRLF/CR to LF; indent continuation lines four spaces. Do not render
+named_entity/entity_category. All blocks share one fresh Asia/Kolkata execution
+timestamp; Last Validated At is the latest instant among that and both metadata dates.
 
-meta.md contains `## Identifier`, a blank line, `- Page ID: <page_id>`, another
-blank line, then the runner-rendered `## Source Code Signature`. Neither section
-appears in utterances.md. Four entities return eight paths; no manifest is created.
+meta.md contains `## Identifier`, blank line, `- Page ID: <page_id>`, blank line,
+then the runner-rendered H2 Source Code Signature. Neither section goes in utterances.md.
+Success metadata: page_id, indexed_at, last_validated_at, total_utterances,
+skipped_utterances=0. Shared durability/result rules apply; duplicate runs are allowed.
 
-## Replacement and errors
-
-Pin directories with no-follow descriptors. Stage/fsync both complete files before
-replacing either; use exclusive temporary files and atomic replacement per file.
-No locks, duplicate confirmation or recovery journal. Last replacement wins per
-file, regardless of request start order. Pairs/entities can mix versions after
-concurrent same-page runs or interruptions. Retry the complete input with a fresh
-timestamp. No rollback, stale-entity removal, legacy migration or automatic deletion.
-Old flat page files and earlier utterances.md layouts remain untouched.
-
-Use the shared six-field result; output_format=markdown. Success metadata contains
-page_id, indexed_at, last_validated_at, total_utterances, skipped_utterances=0.
-Failure has null output; affected_paths lists known replaced files after partial
-failure. Codes: invalid_input, invalid_page_id, invalid_url, page_id_mismatch,
-invalid_context, invalid_date, output_write_error. Runner failures remain separate.
+Errors: invalid_input, invalid_page_id, invalid_url, page_id_mismatch, invalid_context,
+invalid_date, invalid_input_source, input_read_error, output_write_error.

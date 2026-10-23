@@ -1,6 +1,8 @@
 """Store supplied webpage metadata as an agent-readable local bookmark."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -120,31 +122,70 @@ def _write_output(domain: str, page_id: str, contents: dict, written: list) -> l
             os.close(descriptor)
 
 
-def bookmark(page: dict) -> dict:
-    """Save JSON metadata; require title, description, URL and SHA-256 page ID.
+def _source_file(path):
+    root = Path(os.environ['PROJECT_TRANSACTION_INPUT_ROOT'])
+    source = Path(path)
+    if not source.is_absolute():
+        source = root / source
+    try:
+        if not path.strip() or '..' in source.parts or source.resolve() != source:
+            raise ValueError('Not a direct file path')
+        info = source.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('Not a regular unaliased file')
+        return source
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise _Failure('invalid_input_source',
+                       'Source path must be an existing regular file without traversal, symlinks, or hard links: ' + path) from exc
+
+
+def _read_input(source):
+    try:
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'r', encoding='utf-8', newline='') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise OSError('Input must be a regular unaliased file')
+            return stream.read()
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise _Failure('input_read_error', 'Could not read UTF-8 input file: ' + str(source)) from exc
+
+
+def bookmark(page_id: str, meta_data_file_path: str, context_file_path: str | None, article_file_path: str | None) -> dict:
+    """Save a metadata JSON file after verifying its exact URL SHA-256 identity.
 
     Optional recognized fields are strings or null; additional JSON fields are
     accepted but not rendered. No network access or dependency installation occurs.
     """
-    result = {"input": {"raw_input": None, "processed_input": page}, "output": None, "output_format": "markdown", "status": "error", "error": None, "meta_data": {}}
+    result = {"input": {"raw_input": None, "processed_input": {"page_id": page_id, "meta_data_file_path": meta_data_file_path, "context_file_path": context_file_path, "article_file_path": article_file_path}}, "output": None, "output_format": "markdown", "status": "error", "error": None, "meta_data": {}}
     written = []
     try:
+        source = _source_file(meta_data_file_path)
+        try:
+            page = json.loads(_read_input(source))
+            json.dumps(page, allow_nan=False)
+        except (ValueError, OverflowError) as exc:
+            raise _Failure("invalid_input", "meta_data_file_path must contain finite JSON.") from exc
+        if not isinstance(page_id, str) or re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+            raise _Failure("invalid_page_id", "page_id must contain exactly 64 lowercase hexadecimal characters.")
         if not isinstance(page, dict):
             raise _Failure("invalid_input", "page must be a JSON object.")
-        for field in ("title", "description", "url", "page_id"):
+        for field in ("title", "description", "url"):
             if not isinstance(page.get(field), str) or not page[field].strip():
                 raise _Failure("invalid_input", f"{field} must be a nonempty string.")
-        if re.fullmatch(r"[0-9a-f]{64}", page["page_id"]) is None:
-            raise _Failure("invalid_page_id", "page_id must contain exactly 64 lowercase hexadecimal characters.")
+        if "page_id" in page and page["page_id"] != page_id:
+            raise _Failure("page_id_mismatch", "Metadata page_id does not match supplied page_id.")
         for field in ("site_name", "type", "section", "keywords", "datePublished", "dateModified", "image"):
             if page.get(field) is not None and not isinstance(page[field], str):
                 raise _Failure("invalid_input", f"{field} must be a string or null when supplied.")
         domain = _domain(page["url"])
+        if hashlib.sha256(page["url"].encode("utf-8")).hexdigest() != page_id:
+            raise _Failure("page_id_mismatch", "page_id does not match the exact URL hash.")
         content = _render(page, domain)
-        metadata = "## Identifier\n\n- Page ID: " + page["page_id"] + "\n\n" + os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"]
-        result["output"] = _write_output(domain, page["page_id"],
+        metadata = "## Identifier\n\n- Page ID: " + page_id + "\n\n" + os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"]
+        result["output"] = _write_output(domain, page_id,
             {"bookmark.md": content, "meta.md": metadata}, written)
-        result.update(status="ok", meta_data={"domain": domain, "page_id": page["page_id"]})
+        result.update(status="ok", meta_data={"domain": domain, "page_id": page_id})
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
         if written:

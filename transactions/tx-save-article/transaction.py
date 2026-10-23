@@ -1,5 +1,6 @@
 """Validate article source identity and atomically store supplied Markdown."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -230,7 +231,7 @@ def _source_file(path):
         return source
     except (OSError, ValueError, RuntimeError) as exc:
         raise _Failure('invalid_input_source',
-                       'article_file must be an existing regular file without traversal, symlinks, or hard links: ' + path) from exc
+                       'Source path must be an existing regular file without traversal, symlinks, or hard links: ' + path) from exc
 
 
 def _read_input(source):
@@ -245,15 +246,27 @@ def _read_input(source):
         raise _Failure('input_read_error', 'Could not read UTF-8 input file: ' + str(source)) from exc
 
 
-def save_article(page_id: str, article_file: str) -> dict:
-    result = {'input': {'raw_input': None, 'processed_input': {'page_id': page_id, 'article_file': article_file}},
+def save_article(page_id: str, meta_data_file_path: str, context_file_path: str | None, article_file_path: str) -> dict:
+    result = {'input': {'raw_input': None, 'processed_input': {'page_id': page_id, 'meta_data_file_path': meta_data_file_path, 'context_file_path': context_file_path, 'article_file_path': article_file_path}},
               'output': None, 'output_format': 'markdown', 'status': 'error', 'error': None, 'meta_data': {}}
     written = []
     try:
-        article_source = _source_file(article_file)
+        metadata_source = _source_file(meta_data_file_path)
+        try:
+            page = json.loads(_read_input(metadata_source))
+            json.dumps(page, allow_nan=False)
+        except (ValueError, OverflowError) as exc:
+            raise _Failure('invalid_input', 'Metadata file must contain finite JSON.') from exc
+        if not isinstance(page, dict) or not isinstance(page.get('url'), str):
+            raise _Failure('invalid_input', 'Metadata file must contain a JSON object with url.')
+        article_source = _source_file(article_file_path)
         article = _read_input(article_source)
         if not isinstance(page_id, str) or re.fullmatch(r'[0-9a-f]{64}', page_id) is None:
             raise _Failure('invalid_page_id', 'page_id must contain exactly 64 lowercase hexadecimal characters.')
+        _domain(page['url'])
+        if (hashlib.sha256(page['url'].encode('utf-8')).hexdigest() != page_id
+                or ('page_id' in page and page['page_id'] != page_id)):
+            raise _Failure('page_id_mismatch', 'Metadata URL or page_id does not match supplied page_id.')
         if not article.strip():
             raise _Failure('invalid_article', 'article must contain nonempty Markdown.')
         url = _title_url(article)

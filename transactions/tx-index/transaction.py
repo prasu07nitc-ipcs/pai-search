@@ -1,6 +1,7 @@
 """Replace page-scoped entity indexes from validated encoder contexts."""
 from datetime import datetime
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -126,18 +127,59 @@ def _update(root, folder, domain, items, page_id, total, indexed, validated, wri
             os.close(descriptor)
 
 
-def index(page: dict, contexts: list) -> dict:
+def _source_file(path):
+    root = Path(os.environ['PROJECT_TRANSACTION_INPUT_ROOT'])
+    source = Path(path)
+    if not source.is_absolute():
+        source = root / source
+    try:
+        if not path.strip() or '..' in source.parts or source.resolve() != source:
+            raise ValueError('Not a direct file path')
+        info = source.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('Not a regular unaliased file')
+        return source
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise _Failure('invalid_input_source',
+                       'source file must be an existing regular file without traversal, symlinks, or hard links: ' + path) from exc
+
+
+def _read_input(source):
+    try:
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'r', encoding='utf-8', newline='') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise OSError('Input must be a regular unaliased file')
+            return stream.read()
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise _Failure('input_read_error', 'Could not read UTF-8 input file: ' + str(source)) from exc
+
+
+def _read_json(path):
+    source = _source_file(path)
+    try:
+        value = json.loads(_read_input(source))
+        json.dumps(value, allow_nan=False)
+        return value
+    except (ValueError, OverflowError) as exc:
+        raise _Failure("invalid_input", "Source file must contain finite JSON.") from exc
+
+
+def index(page_id: str, meta_data_file_path: str, context_file_path: str, article_file_path: str | None) -> dict:
     result = {'input': {'raw_input': None, 'processed_input': {
-        'page': page, 'contexts': contexts}},
+        'page_id': page_id, 'context_file_path': context_file_path, 'meta_data_file_path': meta_data_file_path, 'article_file_path': article_file_path}},
         'output': None, 'output_format': 'markdown', 'status': 'error',
         'error': None, 'meta_data': {}}
     written = []
     try:
+        page = _read_json(meta_data_file_path)
+        contexts = _read_json(context_file_path)
         if not isinstance(page, dict):
             raise _Failure('invalid_input', 'page must be a JSON metadata object.')
-        if set(page) - {'page_id', 'url', 'datePublished', 'dateModified'}:
-            raise _Failure('invalid_input', 'page accepts only page_id, url, datePublished and dateModified.')
-        page_id, url = page.get('page_id'), page.get('url')
+        if 'page_id' in page and page['page_id'] != page_id:
+            raise _Failure('page_id_mismatch', 'Metadata page_id does not match supplied page_id.')
+        url = page.get('url')
         if not isinstance(page_id, str) or not re.fullmatch('[0-9a-f]{64}', page_id):
             raise _Failure('invalid_page_id', 'page_id must be 64 lowercase hexadecimal characters.')
         if not isinstance(url, str):

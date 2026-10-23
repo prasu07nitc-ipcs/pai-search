@@ -35,6 +35,11 @@ DATA = PROJECT / "data"
 ENV = ROOT / ".venv"
 PYTHON = ENV / "bin/python"
 LOGGER = logging.getLogger(__name__)
+SOURCE_FILE_FIELDS = {
+    "tx-save-article": ("meta_data_file_path", "article_file_path"),
+    "tx-bookmark": ("meta_data_file_path",),
+    "tx-index": ("context_file_path", "meta_data_file_path"),
+}
 
 
 def canonical_hash(value):
@@ -250,15 +255,27 @@ def validate_input(directory, entry, value):
     for argument, default in zip(arguments.kwonlyargs, arguments.kw_defaults):
         parameters.append(inspect.Parameter(argument.arg, inspect.Parameter.KEYWORD_ONLY,
                                             default=inspect.Parameter.empty if default is None else None))
-    arguments_value = {"page": value} if directory.name == "tx-bookmark" else value
+    arguments_value = value
     inspect.Signature(parameters).bind(**arguments_value)
-    # Primitive annotations can also be checked safely before any import.
+    # Validate primitive/nullable annotations before creating storage or a worker.
     primitives = {"str": str, "int": int, "float": float, "bool": bool, "list": list, "dict": dict}
+    def annotation_type(node):
+        if isinstance(node, ast.Name) and node.id in primitives:
+            return primitives[node.id]
+        if isinstance(node, ast.Constant) and node.value is None:
+            return type(None)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            left, right = annotation_type(node.left), annotation_type(node.right)
+            if left is not None and right is not None:
+                return typing.Union[left, right]
+        return None
+
     for argument in positional + arguments.kwonlyargs:
         if argument.annotation is None:
             raise ValueError(f"Parameter {argument.arg} must have an explicit type annotation.")
-        if argument.arg in arguments_value and isinstance(argument.annotation, ast.Name) and argument.annotation.id in primitives:
-            if not matches_type(arguments_value[argument.arg], primitives[argument.annotation.id]):
+        annotation = annotation_type(argument.annotation)
+        if argument.arg in arguments_value and annotation is not None:
+            if not matches_type(arguments_value[argument.arg], annotation):
                 raise ValueError(f"Incorrect type for argument {argument.arg}.")
     if function.returns is None:
         raise ValueError("Transaction entry points must declare their return type.")
@@ -312,6 +329,8 @@ def validate_output(result, transaction_name=None, run_id=None):
         raise ValueError("meta_data must be an object.")
     if not isinstance(result.get("output_format"), str) or not result["output_format"].strip():
         raise ValueError("output_format must be a non-empty string.")
+    if transaction_name in SOURCE_FILE_FIELDS and result["output_format"] != "markdown":
+        raise ValueError("Transaction output_format must be markdown.")
     output = result["output"]
     if result["status"] == "ok":
         if not isinstance(transaction_name, str) or not re.fullmatch(r"tx-[a-z0-9]+(?:-[a-z0-9]+)*", transaction_name):
@@ -436,10 +455,9 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
              '(deny file-link)', '(deny network*)']
     for path in readable:
         rules.append('(allow file-read* (subpath ' + json.dumps(str(path)) + '))')
-    # Only the article transaction needs a caller-selected source file read.
-    if transaction_name == "tx-save-article":
-        # Grant only the caller-selected article, independent of its producer.
-        source = Path(value["article_file"])
+    # Grant only the selected source files, never their producer directories.
+    for field in SOURCE_FILE_FIELDS.get(transaction_name, ()):
+        source = Path(value[field])
         if not source.is_absolute():
             source = PROJECT / source
         rules.append('(allow file-read* (literal ' + json.dumps(str(source.resolve())) + '))')
@@ -490,7 +508,7 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
     os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"] = signature_markdown(source_signature)
     os.environ["PROJECT_TRANSACTION_RUN_ID"] = run_id
     os.environ["PROJECT_TRANSACTION_DATA_DIRECTORY"] = str(outputs)
-    if transaction_name == "tx-save-article":
+    if transaction_name in ("tx-save-article", "tx-bookmark", "tx-index"):
         os.environ["PROJECT_TRANSACTION_INPUT_ROOT"] = str(PROJECT)
     if transaction_name == "tx-index":
         os.environ["PROJECT_TRANSACTION_TIMEZONE"] = "Asia/Kolkata"
@@ -499,7 +517,7 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
         module = load_module(directory / "transaction.py", "project_" + transaction_name.replace("-", "_"))
         function = getattr(module, entry)
         signature = inspect.signature(function)
-        call_value = {"page": value} if transaction_name == "tx-bookmark" else value
+        call_value = value
         bound = signature.bind(**call_value)
         bound.apply_defaults()
         hints = typing.get_type_hints(function)

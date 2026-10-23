@@ -1,8 +1,8 @@
 Name: tx-save-article
 
-Description: Read a supplied Markdown article file from any absolute or repository-relative path, verify its linked title URL against the supplied page_id, save article.md and meta.md under data/articles/<domain>/<page_id>/. Metadata contains references, source page ID, and the source code signature; each file is replaced atomically. Saving here means local persistence.
+Description: Read metadata JSON and Markdown, verify both URL hashes and save the article locally.
 
-Entry point: `transaction.py:save_article(page_id: str, article_file: str) -> dict`
+Entry point: `transaction.py:save_article(page_id: str, meta_data_file_path: str, context_file_path: str | None, article_file_path: str) -> dict`
 
 Instructions: [AGENTS.md](AGENTS.md)
 
