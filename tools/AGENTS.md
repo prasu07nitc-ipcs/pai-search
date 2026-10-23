@@ -6,7 +6,7 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 
 - Create, update, validate, or delete project tools only on an explicit user request. Discovering and inspecting tools to support these tasks is allowed.
 - Limit changes to the requested scope. Executing a tool does not authorize changing its definition or implementation.
-- Tools will be added later. Do not create placeholder tools, implementations, dependencies, runners, or supporting directories unless explicitly requested.
+- Do not create placeholder tools, dependencies, runners, or supporting directories.
 - Change this project-root policy only when explicitly requested by the user.
 - Environment management requires separate explicit authorization as described below; a tool-management request does not provide it.
 
@@ -20,7 +20,10 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 - Keep `TOOL.md` as the concise discovery entry point. Identify the Python function entry point and link to `[AGENTS.md](AGENTS.md)` for detailed instructions.
 - Keep the detailed purpose, input and output contracts, validation, execution rules, required configuration, dependencies, permissions, and side effects in the tool's `AGENTS.md`.
 - Implement the capability as a Python function in `tool.py`, with explicit typed parameters, documented constraints and defaults, and a structured result serializable to JSON. Define expected errors and failure behavior.
-- Every tool returns a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`. `input` contains exactly `raw_input` (the original user request, supplied explicitly as a required string argument) and `processed_input` (an object containing the tool arguments with defaults applied, excluding `raw_input`). Natural-language interpretation remains with the caller; tools validate explicit arguments. `output` is the selected tool’s `output/<run_id>.txt` path (`output/<run_id>.md` for Markdown output) relative to `tools/`, or null on failure. `output_format` is a non-empty string identifying the file content format (for example `json` or `markdown`), also present on failure. A successful run atomically writes its tool-specific payload to `<run_id>.txt` (or `<run_id>.md` for Markdown); different run IDs retain separate files, while repeated run IDs replace the same file; a failed run leaves the previous file intact where possible. `meta_data` is an object containing other tool-specific metadata. `status` is `ok` or `error`. For `ok`, `error` is null; for `error`, it is an object with exactly non-empty string `code` and `message` fields. The shared runner enforces the common envelope; each tool owns its saved payload and metadata contract.
+- Every result is a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
+- `input` contains exactly the required identity string and `processed_input` (arguments with defaults applied, excluding that identity). The identity is `input_text` for `tool-url-validate`, `page_id` for the two webpage tools, and `raw_input` for other tools. Preserve it unchanged. Interpretation belongs to the caller.
+- `status` is `ok` or `error`. Success requires `error: null` and `output` equal to the selected tool's `tool-<name>/output/<page_id>.json` or `.md` path, relative to `tools/`. Failure requires `output: null` and `error` containing exactly nonempty string `code` and `message` fields. `output_format` is `json` or `markdown`, including on failure; `meta_data` is an object.
+- Successful results expose the validated `page_id` in `input` or `meta_data`. Atomically replace the corresponding payload on success; preserve previous payloads on failure where possible. Different IDs retain separate files; concurrent writes to one ID use last replacement wins. The runner enforces the envelope; each tool owns its saved payload and metadata contract.
 
 - Treat the function signature and types as the authoritative callable interface. Derive machine-readable schemas from that interface where practical and keep documentation consistent with it.
 - Make each tool's contracts self-contained. Do not require a particular producing or consuming tool or designate another tool as contract authority.
@@ -31,21 +34,42 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 
 ## Production logging
 
-- New production execution records append only to the tool's `logs/run.log`, with exactly `run_id`, `executed_at`, `processed_input`, `raw_input`, `tool_input`, `output`, `output_format`, `status`, `error`, and `meta_data`. `processed_input` preserves the supplied arguments before defaults are applied, excluding `raw_input`. Reconstruct the exact supplied input object for the input identifier by combining these arguments with the root `raw_input`. `raw_input` preserves the original request. When a valid tool result is available, `tool_input` contains its arguments with defaults applied (excluding `raw_input`), and `output`, `output_format`, `status`, `error`, and `meta_data` copy the respective tool result fields directly. Thus `output` is the saved payload path or null, not a nested result object. If execution fails before a valid result is available, `tool_input`, `output`, `output_format`, and `meta_data` are null, `raw_input` comes from the supplied arguments, and `status` and `error` describe the runner failure. Tool return envelopes remain unchanged. Historical production records remain unchanged; history readers must support the historical `input`, intermediate `supplied_input`, and current `processed_input` fields (identified by the presence of `tool_input`), including older entries that also contain `raw_input` inside `processed_input`. Preserve repeated inputs as separate executions.
-- For every tool, the runner must also append Python diagnostic and timing logs to `logs/runner.log` inside that tool's directory, for production invocations. Record function names, start and completion or failure, timestamps, log levels, exception tracebacks on failure, and total elapsed execution time in seconds measured with a monotonic clock. Cover runner functions and the invoked tool entry point. Keep these diagnostics separate from result records and JSON stdout; do not add timing fields to `logs/run.log`. The parent runner owns log-file writes and must persist captured worker diagnostics, including available diagnostics on failure or timeout, without granting sandboxed tools write access to logs. Tool output-file writes are governed by the file-access policy below. Derive the log path from the selected tool's directory, never the incidental working directory. Document this log in each tool's instructions.
+The identity field is defined in the shared result contract above. For webpage
+tools, `page_id` is the lowercase SHA-256 of the exact UTF-8 URL; tools independently
+validate it before fetching. Historical records using `raw_input` remain readable.
 
-For new production records, `run_id` is the lowercase SHA-256 hexadecimal digest
-of the supplied input object serialized with Python `json.dumps` using
-`sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False`, and
-`allow_nan=False`, then encoded as UTF-8. Object key order is ignored recursively;
-array order and supplied values remain significant. Omitted defaults are not
-expanded. Identical inputs share an ID but remain separate appended records;
-this is an input identifier, not a unique execution identifier. Historical
-production records remain unchanged and may lack `run_id`. Output filenames use
-the production record run_id. The runner explicitly supplies
-this ID to workers as PROJECT_TOOL_RUN_ID configuration before tool import;
-tools must validate it before constructing the output filename. Existing output
-files and historical log records remain unchanged.
+Each production execution appends one record to the selected tool's `logs/run.log`
+with exactly `run_id`, `executed_at`, `processed_input`, the identity field,
+`tool_input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
+`processed_input` preserves supplied arguments before defaults, excluding identity.
+Reconstruct supplied input by combining these arguments with the root identity.
+For an accepted result, `tool_input` contains default-expanded arguments excluding
+identity; other result fields copy directly. On runner failure, `tool_input`,
+`output`, `output_format`, and `meta_data` are null; status and error describe the
+failure. Never record a rejected result as success.
+
+Every invocation executes the tool, including repeated identical inputs. Do not
+read previous result records to block or reuse an execution. Successful executions
+atomically replace the saved payload for the same page ID; failures preserve
+previous payloads where possible. Retain each execution as a separate log record.
+Concurrent executions are not reserved.
+
+The parent also appends diagnostics to tool-local `logs/runner.log`: timestamps,
+levels, function names, start/completion/failure, exception tracebacks, and elapsed
+seconds measured by a monotonic clock. Capture worker diagnostics even on failure
+or timeout. Keep timing out of result records and stdout. Workers cannot write logs.
+Each tool's instructions must identify both logs and link to this section rather
+than repeat the schema.
+
+For new records, `run_id` equals `page_id`; never hash the supplied input object.
+For tools accepting a well-formed `page_id`, use it before dispatch (even if the
+tool later rejects its URL match). For URL validation, obtain it from the accepted
+result's `meta_data.page_id`. Until available, including failures before extraction,
+`run_id` is null. A result exposing a page ID must use a lowercase SHA-256 digest.
+Supply known IDs to workers as `PROJECT_TOOL_RUN_ID` before import; otherwise
+remove that variable. Successful results must match any known execution ID.
+Repeated runs and different tool options for a page share the same ID, while
+remaining separate records. Historical records and output files remain unchanged.
 
 The production result logs use JSON Lines. The parent locks appends and
 flushes them to disk.

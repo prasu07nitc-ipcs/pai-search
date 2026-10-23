@@ -51,9 +51,9 @@ def _validate(url: str):
 
 
 
-def _extract_url(raw_input: str) -> str:
+def _extract_url(input_text: str) -> str:
     """Select the first valid explicit HTTP(S) candidate in textual order."""
-    for match in re.finditer(r"(?<![\w+.-])https?://[^\s<>\"'`]+", raw_input, re.IGNORECASE):
+    for match in re.finditer(r"(?<![\w+.-])https?://[^\s<>\"'`]+", input_text, re.IGNORECASE):
         candidate = match.group().split("](", 1)[0].rstrip(".,;:!?")
         # Remove prose/Markdown closing delimiters, preserving balanced URL ones.
         while candidate:
@@ -68,39 +68,38 @@ def _extract_url(raw_input: str) -> str:
         except _Failure:
             continue
         return candidate
-    raise _Failure("invalid_url", "No valid absolute HTTP(S) URL without credentials found in raw_input.")
+    raise _Failure("invalid_url", "No valid absolute HTTP(S) URL without credentials found in input_text.")
 
 
-def validate_url(raw_input: str) -> dict:
+def validate_url(input_text: str) -> dict:
     """Extract the first valid explicit HTTP(S) URL and save its JSON identity.
 
-    Preserve raw_input verbatim; skip invalid candidates and strip surrounding
+    Preserve input_text verbatim; skip invalid candidates and strip surrounding
     prose punctuation. No DNS lookup or network request is performed.
     """
     result = {
-        "input": {"raw_input": raw_input, "processed_input": {}},
+        "input": {"input_text": input_text, "processed_input": {}},
         "output": None, "output_format": "json", "status": "error",
         "error": None, "meta_data": {},
     }
     try:
-        url = _extract_url(raw_input)
+        url = _extract_url(input_text)
         payload = {"url": url, "page_id": hashlib.sha256(url.encode("utf-8")).hexdigest()}
-        result["output"] = _write_output(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
+        result["output"] = _write_output(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n", payload["page_id"])
+        result["meta_data"]["page_id"] = payload["page_id"]
         result["status"] = "ok"
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
     return result
 
 
-def _write_output(content: str) -> str:
-    """Atomically replace <run_id>.txt using a pinned tool-local directory."""
-    # Runner-supplied IDs are SHA-256 hashes of production inputs.
+def _write_output(content: str, page_id: str) -> str:
+    """Atomically replace <page_id>.json using a pinned tool-local directory."""
     # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
-    run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
-    if re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
-        raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
-    filename = f"{run_id}.txt"
+    if re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+        raise _Failure("output_write_error", "Output page_id is missing or invalid.")
+    filename = f"{page_id}.json"
     descriptor = None
     temporary = None
     try:
@@ -121,7 +120,7 @@ def _write_output(content: str) -> str:
         temporary = None
         return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool output directory.") from exc
+        raise _Failure("output_write_error", "Could not save <page_id>.json in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:

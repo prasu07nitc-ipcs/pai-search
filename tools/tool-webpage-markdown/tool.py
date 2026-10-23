@@ -10,7 +10,7 @@ owns all log writes; this module does not implement sandbox enforcement.
 
 The parent writes production results to logs/run.log and diagnostics/timing to
 logs/runner.log under this tool. Record formats and run-ID rules:
-tools/AGENTS.md#production-logging. Production IDs hash supplied input. The runner
+tools/AGENTS.md#production-logging. Production run IDs equal page_id. The runner
 supplies PROJECT_TOOL_RUN_ID before import. Historical logs and outputs are not
 rewritten automatically.
 
@@ -26,6 +26,7 @@ check follows argument validation and precedes downloading; it never installs.
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import ipaddress
 import os
@@ -226,7 +227,7 @@ def _extract_markdown(
     Defaults retain tables and formatting, exclude images, links, and comments,
     enable backup extraction and disable deduplication. Requires Trafilatura 2.x.
     Network budget: 15 seconds; response limit: 2 MiB; runner timeout: 60 seconds.
-    Saves UTF-8 Markdown directly in tool-local output/<run_id>.md. Compare joins
+    Saves UTF-8 Markdown directly in tool-local output/<page_id>.md. Compare joins
     nonempty variants with labeled headings; single modes preserve extracted text.
     Supported Markdown structure is retained; exact CSS/font layout is not.
     Expected failures return structured errors; unexpected exceptions propagate.
@@ -273,21 +274,19 @@ def _extract_markdown(
                                     for selected in modes if variants[selected] is not None)
         else:
             content = variants[mode]
-        result.update(status="ok", result_file=_write_output(content))
+        result.update(status="ok", result_file=_write_output(content, hashlib.sha256(url.encode("utf-8")).hexdigest()))
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
     return result
 
 
-def _write_output(content: str) -> str:
-    """Atomically replace <run_id>.md using a pinned tool-local directory."""
-    # Runner-supplied IDs are SHA-256 hashes of production inputs.
+def _write_output(content: str, page_id: str) -> str:
+    """Atomically replace <page_id>.md using a pinned tool-local directory."""
     # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
-    run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
-    if re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
-        raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
-    filename = f"{run_id}.md"
+    if re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+        raise _Failure("output_write_error", "Output page_id is missing or invalid.")
+    filename = f"{page_id}.md"
     descriptor = None
     temporary = None
     try:
@@ -308,7 +307,7 @@ def _write_output(content: str) -> str:
         temporary = None
         return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.md in the tool output directory.") from exc
+        raise _Failure("output_write_error", "Could not save <page_id>.md in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:
@@ -321,23 +320,29 @@ def _write_output(content: str) -> str:
 
 def extract_markdown(
     url: str,
-    raw_input: str,
+    page_id: str,
     mode: Literal["balanced", "precision", "recall", "compare"] = "balanced",
     include_images: Literal[False] = False,
     include_links: Literal[False] = False,
     include_tables: bool = True,
 ) -> dict:
-    """Extract Markdown and save it directly to output/<run_id>.md.
+    """Extract Markdown and save it directly to output/<page_id>.md.
 
-    raw_input is the caller's original request, required and never interpreted.
+    page_id must be the lowercase SHA-256 digest of the exact UTF-8 input URL.
+    The caller supplies it independently; no other tool is required.
     URL/options constraints match _extract_markdown; defaults are recorded in
     input.processed_input. Expected failures return output=null; successful paths
-    are relative to tools/. Success atomically replaces the previous <run_id>.md.
+    are relative to tools/. Success atomically replaces the previous <page_id>.md.
     """
     processed = {"url": url, "mode": mode, "include_images": include_images,
                  "include_links": include_links, "include_tables": include_tables}
+    if not re.fullmatch(r"[0-9a-f]{64}", page_id) or page_id != hashlib.sha256(url.encode("utf-8")).hexdigest():
+        return {"input": {"page_id": page_id, "processed_input": processed},
+                "output": None, "output_format": "markdown", "status": "error",
+                "error": {"code": "invalid_page_id", "message": "page_id must equal the lowercase SHA-256 digest of the supplied URL."},
+                "meta_data": {"requested_url": url, "final_url": None, "mode": mode}}
     payload = _extract_markdown(url, mode, include_images, include_links, include_tables)
-    return {"input": {"raw_input": raw_input, "processed_input": processed},
+    return {"input": {"page_id": page_id, "processed_input": processed},
             "output": payload.get("result_file"), "output_format": "markdown", "status": payload["status"],
             "error": payload["error"],
             "meta_data": {"requested_url": url, "final_url": payload["final_url"], "mode": mode}}

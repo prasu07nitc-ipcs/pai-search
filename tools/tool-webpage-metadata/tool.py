@@ -10,7 +10,7 @@ owns all log writes; this module does not implement sandbox enforcement.
 
 The parent writes production results to logs/run.log and diagnostics/timing to
 logs/runner.log under this tool. Record formats and run-ID rules:
-tools/AGENTS.md#production-logging. Production IDs hash supplied input. The runner
+tools/AGENTS.md#production-logging. Production run IDs equal page_id. The runner
 supplies PROJECT_TOOL_RUN_ID before import. Historical logs and outputs are not
 rewritten automatically.
 
@@ -19,7 +19,7 @@ tools/.venv/bin/python -B tools/runner.py --tool <tool-name>.
 --input accepts named JSON arguments. The runner enforces the production result
 envelope. Do not install/repair dependencies during execution.
 
-Select --tool tool-webpage-og-crawler; keep the process timeout at least 20
+Select --tool tool-webpage-metadata; keep the process timeout at least 20
 seconds (the runner default). Python 3.11+ standard library only.
 """
 
@@ -417,7 +417,7 @@ def _crawl_open_graph(url: str) -> _PayloadResult:
 
 
 class CrawlInput(TypedDict):
-    raw_input: str
+    page_id: str
     processed_input: dict[str, str]
 
 
@@ -430,19 +430,22 @@ class CrawlResult(TypedDict):
     meta_data: dict
 
 
-def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
-    """Fetch metadata for a public URL, preserving the caller's original request.
+def crawl_open_graph(url: str, page_id: str) -> CrawlResult:
+    """Fetch metadata for a public URL, preserving its validated input identity.
 
-    raw_input is a required string supplied by the caller; it is never interpreted.
+    page_id must be the lowercase SHA-256 hexadecimal digest of the exact input URL.
     URL constraints and the 15-second network budget match _crawl_open_graph.
-    Success atomically replaces tool-local output/<run_id>.txt with UTF-8 JSON text.
+    Success atomically replaces tool-local output/<page_id>.json with UTF-8 JSON text.
     Expected fetch/write failures return output=null and a structured error.
     """
     result: CrawlResult = {
-        "input": {"raw_input": raw_input, "processed_input": {"url": url}},
+        "input": {"page_id": page_id, "processed_input": {"url": url}},
         "output": None, "output_format": "json", "status": "error", "error": None,
         "meta_data": {"requested_url": url, "final_url": None, "date_normalization": {}},
     }
+    if not re.fullmatch(r"[0-9a-f]{64}", page_id) or page_id != hashlib.sha256(url.encode("utf-8")).hexdigest():
+        result["error"] = {"code": "invalid_page_id", "message": "page_id must equal the lowercase SHA-256 digest of the supplied URL."}
+        return result
     payload = _crawl_open_graph(url)
     result["meta_data"]["final_url"] = payload["final_url"]
     if payload["status"] == "error":
@@ -453,24 +456,22 @@ def crawl_open_graph(url: str, raw_input: str) -> CrawlResult:
     for field in ("datePublished", "dateModified"):
         content[field], info = _normalize_date(content[field])
         result["meta_data"]["date_normalization"][field] = info
-    content["page_id"] = hashlib.sha256(content["url"].encode("utf-8")).hexdigest() if content["url"] is not None else None
+    content["page_id"] = page_id
     try:
-        path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
+        path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n", page_id)
         result.update(status="ok", output=path)
     except _Failure as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
     return result
 
 
-def _write_output(content: str) -> str:
-    """Atomically replace <run_id>.txt using a pinned tool-local directory."""
-    # Runner-supplied IDs are SHA-256 hashes of production inputs.
+def _write_output(content: str, page_id: str) -> str:
+    """Atomically replace <page_id>.json using a pinned tool-local directory."""
     # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
-    run_id = os.environ.get("PROJECT_TOOL_RUN_ID", "")
-    if re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
-        raise _Failure("output_write_error", "Runner execution run_id is missing or invalid.")
-    filename = f"{run_id}.txt"
+    if re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+        raise _Failure("output_write_error", "Output page_id is missing or invalid.")
+    filename = f"{page_id}.json"
     descriptor = None
     temporary = None
     try:
@@ -491,7 +492,7 @@ def _write_output(content: str) -> str:
         temporary = None
         return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <run_id>.txt in the tool output directory.") from exc
+        raise _Failure("output_write_error", "Could not save <page_id>.json in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:

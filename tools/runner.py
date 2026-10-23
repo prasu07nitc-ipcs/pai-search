@@ -11,7 +11,6 @@ import types
 import typing
 import ctypes
 import fcntl
-import hashlib
 import importlib.util
 import json
 import logging
@@ -40,51 +39,6 @@ def logs_directory(directory):
         if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink != 1)):
             raise ValueError("Logs must be regular, unlinked files")
     return target
-
-
-class DuplicateInputError(ValueError):
-    """A previous production execution requires explicit rerun confirmation."""
-
-
-@contextlib.contextmanager
-def production_history(directory):
-    """Read history under a shared lock without creating a result log."""
-    try:
-        history = (directory / "logs" / "run.log").open("r", encoding="utf-8")
-    except FileNotFoundError:
-        yield ()
-        return
-    with history:
-        fcntl.flock(history, fcntl.LOCK_SH)
-        yield history
-
-
-def require_new_input(directory, input_id):
-    """Check successful production history, including records lacking run_id."""
-    with production_history(directory) as history:
-        for line in history:
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            if record.get("status") != "ok":
-                continue
-            if "tool_input" in record:
-                supplied = dict(record["processed_input"])
-                supplied.setdefault("raw_input", record["raw_input"])
-            elif "supplied_input" in record:
-                supplied = record["supplied_input"]
-            else:
-                supplied = record["input"]
-            previous_id = hashlib.sha256(json.dumps(
-                supplied,
-                sort_keys=True, separators=(",", ":"),
-                ensure_ascii=False, allow_nan=False,
-            ).encode("utf-8")).hexdigest()
-            if previous_id == input_id:
-                raise DuplicateInputError(
-                    f"Input already executed for {directory.name} (run_id {input_id}). "
-                    "Ask the user to confirm a rerun, then pass --rerun."
-                )
 
 
 def log_execution(function):
@@ -216,9 +170,10 @@ def validate_output(result, tool_name=None, run_id=None):
     if set(result) != {"input", "output", "output_format", "status", "error", "meta_data"}:
         raise ValueError("Tool result requires exactly input, output, output_format, status, error, and meta_data.")
     inputs = result["input"]
-    if (not isinstance(inputs, dict) or set(inputs) != {"raw_input", "processed_input"}
-            or not isinstance(inputs["raw_input"], str) or not isinstance(inputs["processed_input"], dict)):
-        raise ValueError("input requires raw_input string and processed_input object.")
+    identity = next((key for key in ("input_text", "page_id", "raw_input") if isinstance(inputs, dict) and key in inputs), "raw_input")
+    if (not isinstance(inputs, dict) or set(inputs) != {identity, "processed_input"}
+            or not isinstance(inputs[identity], str) or not isinstance(inputs["processed_input"], dict)):
+        raise ValueError("input requires an input_text, page_id, or legacy raw_input string and processed_input object.")
     if not isinstance(result["meta_data"], dict):
         raise ValueError("meta_data must be an object.")
     if not isinstance(result.get("output_format"), str) or not result["output_format"].strip():
@@ -226,11 +181,17 @@ def validate_output(result, tool_name=None, run_id=None):
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
-                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64})\.(?:txt|md)", output) is None
+                r"tool-[a-z0-9]+(?:-[a-z0-9]+)*/output/(?:[0-9a-f]{64})\.(?:json|md)", output) is None
                 or "/../" in output or "/./" in output):
-            raise ValueError("Successful output must reference tool output/<run_id>.txt or <run_id>.md relative to tools/.")
-        if tool_name is not None and output not in {f"{tool_name}/output/{run_id}.txt", f"{tool_name}/output/{run_id}.md"}:
-            raise ValueError("Output path must match the selected tool and execution run_id.")
+            raise ValueError("Successful output must reference tool output/<page_id>.json or <page_id>.md relative to tools/.")
+        page_id = inputs.get("page_id", result["meta_data"].get("page_id"))
+        if not isinstance(page_id, str) or re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+            raise ValueError("Successful output requires a valid page_id in input or meta_data.")
+        if run_id is not None and page_id != run_id:
+            raise ValueError("Result page_id must match execution run_id.")
+        extension = {"json": "json", "markdown": "md"}.get(result["output_format"])
+        if extension is None or (tool_name is not None and output != f"{tool_name}/output/{page_id}.{extension}"):
+            raise ValueError("Output path must match the selected tool, page_id, and output_format.")
     elif output is not None:
         raise ValueError("Failed tool output must be null.")
     error = result["error"]
@@ -326,15 +287,19 @@ def worker(tool_name, value, run_id=None):
             os._exit(1)
         os.waitpid(child, 0)
         raise RuntimeError("Sandbox process restriction verification failed.")
-    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
-        raise ValueError("Invalid execution run_id.")
-    os.environ["PROJECT_TOOL_RUN_ID"] = run_id
+    if run_id is not None:
+        if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
+            raise ValueError("Invalid execution run_id.")
+        os.environ["PROJECT_TOOL_RUN_ID"] = run_id
+    else:
+        os.environ.pop("PROJECT_TOOL_RUN_ID", None)
     # Keep tool prints away from the JSON transport on stdout.
     with contextlib.redirect_stdout(sys.stderr):
         module = load_module(directory / "tool.py", "project_" + tool_name.replace("-", "_"))
         function = getattr(module, entry)
         signature = inspect.signature(function)
         bound = signature.bind(**value)
+        bound.apply_defaults()
         hints = typing.get_type_hints(function)
         for name, argument in bound.arguments.items():
             if name not in hints or not matches_type(argument, hints[name]):
@@ -345,26 +310,26 @@ def worker(tool_name, value, run_id=None):
 
 
 @log_execution
-def invoke(tool_name, value, *, timeout=20, rerun=False):
+def invoke(tool_name, value, *, timeout=20):
     verify_environment()
     directory, entry = resolve_tool(tool_name)
     validate_input(directory, entry, value)
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
     logs_directory(directory)
-    input_id = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
-    if not rerun:
-        log_execution(require_new_input)(directory, input_id)
+    run_id = value.get("page_id")
+    if run_id is not None and (not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None):
+        run_id = None
     outputs = output_directory(directory)
     if outputs is not None:
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
-    run_id = input_id
+    identity = next(key for key in ("input_text", "raw_input", "page_id") if key in value)
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
-        "processed_input": {key: argument for key, argument in value.items() if key != "raw_input"},
-        "raw_input": value["raw_input"], "tool_input": None,
+        "processed_input": {key: argument for key, argument in value.items() if key != identity},
+        identity: value[identity], "tool_input": None,
         "output": None, "output_format": None,
         "status": "error", "error": None, "meta_data": None,
     }
@@ -378,8 +343,10 @@ def invoke(tool_name, value, *, timeout=20, rerun=False):
         worker_stderr = completed.stderr
         result = json.loads(completed.stdout)
         validate_output(result, tool_name, run_id)
+        if set(result["input"]) != {identity, "processed_input"} or result["input"][identity] != value[identity]:
+            raise ValueError("Tool must preserve the supplied input identity.")
         record.update(
-            raw_input=result["input"]["raw_input"],
+            run_id=run_id or (result["meta_data"].get("page_id") if result["status"] == "ok" else None),
             tool_input=result["input"]["processed_input"],
             output=result["output"], output_format=result["output_format"],
             status=result["status"], error=result["error"],
@@ -393,7 +360,9 @@ def invoke(tool_name, value, *, timeout=20, rerun=False):
     except (subprocess.SubprocessError, ValueError, OSError, KeyError) as exc:
         if isinstance(exc, subprocess.CalledProcessError):
             worker_stderr = exc.stderr
-        record["error"] = {"code": "runner_error", "message": str(exc)}
+        record.update(tool_input=None, output=None, output_format=None,
+                      status="error", meta_data=None,
+                      error={"code": "runner_error", "message": str(exc)})
         raise
     finally:
         if worker_stderr:
@@ -413,14 +382,11 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--input", help="JSON object of named tool arguments")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
-    parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
     verify_environment()
     directory, _ = resolve_tool(args.tool)
     if not math.isfinite(args.timeout) or not 0 < args.timeout <= 300:
         parser.error("--timeout must be greater than zero and at most 300 seconds")
-    if args.rerun and (args.worker or args.input is None):
-        parser.error("--rerun requires production --input")
     if not args.worker:
         logs_directory(directory)
     logging.basicConfig(
@@ -429,29 +395,12 @@ def main():
         handlers=[logging.StreamHandler(sys.stderr) if args.worker else
                   logging.FileHandler(directory / "logs" / "runner.log", mode="a", encoding="utf-8")],
     )
-    # Repeat these checks under logging so their timing is recorded as well.
-    verify_environment()
-    resolve_tool(args.tool)
     if args.worker:
         payload = json.load(sys.stdin)
         worker(args.tool, payload["input"], payload["run_id"])
     elif args.input is not None:
         value = json.loads(args.input)
-        try:
-            result = invoke(args.tool, value, timeout=args.timeout, rerun=args.rerun)
-        except DuplicateInputError as exc:
-            print(str(exc), file=sys.stderr)
-            if not sys.stdin.isatty():
-                parser.exit(2)
-            print("Run this input again? [y/N] ", end="", file=sys.stderr, flush=True)
-            try:
-                answer = input().strip().lower()
-            except EOFError:
-                answer = ""
-            if answer not in ("y", "yes"):
-                print("Rerun cancelled; tool was not executed.", file=sys.stderr)
-                parser.exit(0)
-            result = invoke(args.tool, value, timeout=args.timeout, rerun=True)
+        result = invoke(args.tool, value, timeout=args.timeout)
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     else:
         parser.error("Supply --input JSON")
