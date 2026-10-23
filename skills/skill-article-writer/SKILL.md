@@ -1,6 +1,6 @@
 ---
 name: skill-article-writer
-description: Write a sourced, up-to-date Markdown article from article metadata and its main Markdown content, researching relevant developments on the web.
+description: Write a sourced, up-to-date Markdown article from a required SHA-256 page_id, article metadata, and main Markdown content, researching relevant developments on the web.
 ---
 
 # Article writer

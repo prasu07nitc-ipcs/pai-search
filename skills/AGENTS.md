@@ -28,11 +28,20 @@ or additional skill is required. This is an authorized execution side effect.
 
 ### Identity and cache
 
+The input capture, exact-input comparison, input-file persistence, and input-field
+presentation rules below apply to other skills only. `skill-article-writer` and
+`skill-context-encoder` use the complete overriding rules in
+[Page-based outputs](#page-based-outputs): no input logging or comparison.
+
 Preserve the original user input verbatim as `raw_input`. If source and settings
 span messages, join their verbatim text chronologically with two newlines; exclude
 confirmation-only replies. Do not expand defaults or substitute interpreted input.
-Compute `run_id = sha256(raw_input.encode("utf-8")).hexdigest()`: lowercase,
-64 hexadecimal characters, without whitespace, case, Unicode, or newline normalization.
+For `skill-article-writer` and `skill-context-encoder`, extract and validate the
+separate `page_id` input, then assign `run_id = page_id`; do not compute an input
+hash. See [Page-based outputs](#page-based-outputs) for lookup and conflict rules.
+Other skills compute `run_id = sha256(raw_input.encode("utf-8")).hexdigest()`:
+lowercase, 64 hexadecimal characters, without whitespace, case, Unicode, or
+newline normalization.
 
 After input validation and required confirmation, inspect the selected skill's
 `logs/run.log` before transformation or loading workflow dependencies:
@@ -40,7 +49,7 @@ After input validation and required confirmation, inspect the selected skill's
 - No log or matching record: cache miss. Capture the actual UTC start time and
   execute. Internal iterations/component stages form one run; independently
   requested component executions use their own skill-local cache.
-- Matching hash: require identical `raw_input`, the expected output path, a valid
+- Matching execution identity: require identical `raw_input`, the expected output path, a valid
   record, and a readable regular output file matching its format and result
   contract. Return the saved contents, including handled failures, without
   re-execution, rerun confirmation, rewriting files, or another log entry. For
@@ -48,19 +57,84 @@ After input validation and required confirmation, inspect the selected skill's
   UTF-8 file whose contents exactly equal `raw_input`. Display the saved entry as
   described below. Historical records without `input` remain valid; show their
   raw input inline and indicate that no saved input file exists.
-- Missing/invalid referenced output, malformed history, conflicting same-hash
-  records, or an output without a matching record: report a cache/storage error.
+- Missing/invalid referenced output, malformed history, conflicting records for the same execution identity, or an output without a matching record: report a cache/storage error.
   Do not silently rerun, overwrite, or infer completion. The same active agent
   may finish its own pending persistence with the original record.
 
-Cache identity is skill-local and input-only: model, instruction, or implicit
-default changes do not invalidate it. Preserve historical UUID records unchanged;
-they are not hash-cache hits. No automatic migration or backfill.
+Cache identity is skill-local. Page-based skills use the supplied page ID and
+compare exact input for reuse; other skills use the input hash. Model, instruction,
+or implicit default changes do not invalidate a cached result. Preserve historical
+UUID records unchanged; they are not hash-cache hits. No automatic migration or backfill.
+
+### Page-based outputs
+
+For `skill-article-writer` and `skill-context-encoder`, require a separate
+`page_id` string matching `^[0-9a-f]{64}$` (a lowercase hexadecimal SHA-256 key).
+Validate format only; do not derive it from source content or normalize it.
+Assign the validated value directly to `run_id`, without computing a hash.
+Do not save source text, metadata, purpose, request text, or settings in input
+files or log fields. Do not create `input/` for new runs, compute input hashes,
+or include `raw_input` or `input` in new records. Process supplied inputs directly
+in memory. Do not copy input content into `meta_data` or error messages as a
+substitute for input logging. Recording the page ID remains required.
+
+For new runs of these two skills, successful results use
+`output/<page_id>.md` (article writer) or `output/<page_id>.json` (context encoder).
+Handled failures use `output/<page_id>.error.txt` with `output_format: "text"`.
+Include `page_id` in `meta_data` even though it equals `run_id`, and record the
+actual path in `output`. Do not change result content schemas.
+
+Before transformation, look up records by `run_id = page_id` and also by
+`meta_data.page_id` to locate historical page-based runs with input-hash IDs.
+Validate the matching record's identity, status, format, expected output path,
+and readable regular output file against the skill's result contract. Do not
+compare current input with logged input or read historical input files for cache
+validation. A valid matching page record returns the saved result, including
+handled failures, even if the current content, metadata, or settings differ.
+Do not regenerate, overwrite, version, or append a record on a cache hit.
+
+A historical record with the same `run_id` but a different recorded page ID
+is an identity conflict. Multiple nonidentical records claiming one page,
+malformed history, missing or invalid outputs, or output/error files without a
+matching record are storage errors. No matching record and no conflicting output
+files means a cache miss. Historical input files neither establish cache identity
+nor block execution.
+
+Repeat page lookup and record/output validation under the exclusive log lock
+before publishing. If a competing run committed a valid result for the page,
+discard the candidate output and return that saved result regardless of input
+content. Inconsistent records remain errors.
+
+Historical records retain their original IDs and output paths. Records without
+`meta_data.page_id` may match only by their stored `run_id`; validate their original
+`output/<run_id>.txt` path. Historical page-based records retain their recorded
+page-based success or `output/<stored_run_id>.error.txt` failure path. New records
+must satisfy `run_id = meta_data.page_id = requested page_id` and the paths above.
+Never migrate, rename, delete, or rewrite historical inputs, outputs, or records.
+
+For these two skills, new records contain exactly these fields in this order:
+`run_id`, `started_at`, `completed_at`, `output`, `output_format`, `status`, `error`,
+`meta_data`. All shared field constraints apply except the omitted input fields.
+
+For persistence, create only `output/` and `logs/` as needed. Validate the result,
+stage only the output in a temporary UTF-8 file inside `output/`, and flush and
+fsync it. Acquire the exclusive `logs/run.log` lock, reread history and perform
+the page checks above, atomically publish the output, then append, flush, and
+fsync the record. On output failure append nothing; on log failure retain the
+output and retry with the original record/ID. Shared symlink, hard-link,
+no-overwrite, error-reporting, and JSON-format rules still apply.
+
+Display the persisted execution entry after the result. New entries have no
+`raw_input` or `input` rows or input links. When displaying a historical entry,
+show its other fields in stored order but omit `raw_input` and `input`; retain
+those fields unchanged in the log. Render the output as an absolute file link.
+This overrides input-field display requirements below for these two skills.
 
 ### Record contract
 
 Append one compact UTF-8 JSON object and newline per finished execution cycle,
-with exactly these fields (values below illustrate the structure):
+with exactly these fields for other skills (values below illustrate the structure).
+The two page-based skills use the reduced field list above:
 
 ```json
 {
@@ -83,7 +157,8 @@ with exactly these fields (values below illustrate the structure):
   `raw_input` verbatim as UTF-8, without an added newline or normalization. Retain
   the inline `raw_input` field for identity checks and history compatibility.
   This field is required for new records; never rewrite historical records.
-- `output` is exactly `output/<run_id>.txt`, relative to this skill's root.
+- `output` is `output/<run_id>.txt` by default, relative to this skill's root;
+  the two skills in [Page-based outputs](#page-based-outputs) use those paths instead.
   Save the complete result directly: JSON object/array, text (including empty),
   or Markdown. `output_format` is `json`, `text`, or `markdown` accordingly.
 - For every new run with `output_format: "json"`, pretty-print the saved result
@@ -103,6 +178,9 @@ with exactly these fields (values below illustrate the structure):
   interruption, and cache hits create no record. Tests never write production logs.
 
 ### Persistence and response
+
+For other skills, use the input-and-output persistence procedure below; the two
+page-based skills use the output-only procedure above.
 
 Resolve paths from the skill root; create `input/`, `output/`, and `logs/` only for real
 execution. Reject symlinked directories/files and hard-linked destination files;
@@ -136,7 +214,8 @@ including empty decoder output and handled failures. Do not create an entry for
 invalid input, pending confirmation, or management requests. Internal component
 stages do not produce separate tables.
 
-Include every record field in stored order. Render `raw_input` as a clickable
+For the two page-based skills, apply the input-field omissions specified above.
+For other skills, include every record field in stored order. Render `raw_input` as a clickable
 link to the saved input file rather than repeating its contents; render `input`
 and `output` as clickable file links too. Resolve link destinations to absolute
 paths at response time; keep paths in maintained instructions and JSON records

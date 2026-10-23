@@ -1,6 +1,6 @@
 ---
 name: skill-context-encoder
-description: Extract context from a complete text blob into a JSON array of entity utterances, preserving facts, attribution, uncertainty, and source order.
+description: Extract context using a required SHA-256 page_id and a complete text blob into a JSON array of entity utterances, preserving facts, attribution, uncertainty, and source order.
 ---
 
 # Context encoder
