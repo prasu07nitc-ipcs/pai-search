@@ -1,4 +1,4 @@
-"""Transaction runner with exclusive data ownership and isolated tests (macOS, Python 3.11+).
+"""Transaction runner with exclusive data ownership (macOS, Python 3.11+).
 
 STRICT dependency policy: runner infrastructure must use only Python built-ins
 and the standard library. No third-party, optional, vendored, or indirect Python
@@ -8,7 +8,6 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 import argparse
-import base64
 import ast
 import contextlib
 import inspect
@@ -27,8 +26,6 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-import uuid
-import tempfile
 import stat
 from urllib.parse import urlsplit, urlunsplit
 from datetime import datetime, timezone
@@ -130,7 +127,7 @@ def logs_directory(directory):
     if target.is_symlink():
         raise ValueError("Logs directory must not be a symlink")
     target.mkdir(exist_ok=True)
-    for name in ("run.log", "runner.log", "test-report.log", "index.lock", "index-attempts.jsonl"):
+    for name in ("run.log", "runner.log", "index.lock", "index-attempts.jsonl"):
         path = target / name
         if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink != 1)):
             raise ValueError("Logs must be regular, unlinked files")
@@ -208,7 +205,7 @@ def resolve_transaction(name):
     directory = ROOT / name
     if directory.is_symlink() or directory.resolve().parent != ROOT:
         raise ValueError("Transaction must be a direct, non-symlink project directory.")
-    for filename in ("TRANSACTION.md", "AGENTS.md", "transaction.py", "validator.py"):
+    for filename in ("TRANSACTION.md", "AGENTS.md", "transaction.py"):
         path = directory / filename
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"Missing regular transaction file: {filename}")
@@ -226,16 +223,6 @@ def resolve_transaction(name):
         raise ValueError("TRANSACTION.md must declare a public transaction.py function entry point.")
     if not re.search(rf"^Data directory: data/{re.escape(owned_data_name(name))}/\s*$", discovery, re.M):
         raise ValueError("Data directory must match the transaction name convention.")
-    validator_tree = ast.parse((directory / "validator.py").read_text(encoding="utf-8"))
-    checker = next((node for node in validator_tree.body
-                    if isinstance(node, ast.FunctionDef) and node.name == "check_result"), None)
-    if (checker is None or checker.args.posonlyargs or checker.args.kwonlyargs
-            or checker.args.vararg or checker.args.kwarg or checker.args.defaults
-            or [argument.arg for argument in checker.args.args] != ["value", "actual", "expected"]
-            or any(argument.annotation is None or ast.unparse(argument.annotation) != "dict"
-                   for argument in checker.args.args)
-            or checker.returns is None or ast.unparse(checker.returns) != "list[str]"):
-        raise ValueError("validator.py must define check_result(value: dict, actual: dict, expected: dict) -> list[str].")
     return directory, entry[1]
 
 
@@ -396,7 +383,7 @@ def validate_saved_output(result, transaction_name, destination):
 
 
 @log_execution
-def worker(transaction_name, value, expected=None, run_id=None, data_directory=None, test_run=False, source_signature=None, input_directory=None, index_batch=None):
+def worker(transaction_name, value, run_id=None, data_directory=None, source_signature=None, index_batch=None):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
@@ -408,12 +395,7 @@ def worker(transaction_name, value, expected=None, run_id=None, data_directory=N
     if (not outputs.is_absolute() or outputs.resolve() != outputs or
             outputs.name != owned_data_name(transaction_name) or not outputs.is_dir()):
         raise ValueError("Invalid prepared data directory.")
-    if test_run:
-        temporary_root = outputs.parent.parent
-        if (outputs.parent.name != "data" or temporary_root.parent != Path(tempfile.gettempdir()).resolve()
-                or not temporary_root.name.startswith("transaction-test-")):
-            raise ValueError("Test worker destination must be an isolated runner temporary directory.")
-    elif outputs != DATA / owned_data_name(transaction_name):
+    if outputs != DATA / owned_data_name(transaction_name):
         raise ValueError("Production worker destination must match the repository data convention.")
     validate_tree(outputs)
     # Install a kernel-enforced sandbox before importing transaction code.
@@ -432,17 +414,6 @@ def worker(transaction_name, value, expected=None, run_id=None, data_directory=N
         rules.append('(allow file-read* (subpath ' + json.dumps(str(path)) + '))')
     # Grant each selected transaction only its authorized producer output reads.
     article_input_root = PROJECT
-    if test_run:
-        if not isinstance(input_directory, str):
-            raise ValueError("Parent must supply the isolated fixture root.")
-        article_input_root = Path(input_directory)
-        if (not article_input_root.is_absolute() or article_input_root.resolve() != article_input_root
-                or article_input_root.parent != PROJECT / ".tmp"
-                or not article_input_root.name.startswith("transaction-fixtures-")
-                or not article_input_root.is_dir()):
-            raise ValueError("Test fixture root must be isolated under project .tmp/.")
-    elif input_directory is not None:
-        raise ValueError("Production cannot override the source input root.")
     source_components = {
         "tx-bookmark": ("tools/tool-webpage-og-crawler",),
         "tx-index": ("tools/tool-webpage-og-crawler", "skills/skill-context-encoder"),
@@ -493,7 +464,7 @@ def worker(transaction_name, value, expected=None, run_id=None, data_directory=N
             os._exit(1)
         os.waitpid(child, 0)
         raise RuntimeError("Sandbox process restriction verification failed.")
-    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", run_id) is None:
+    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
         raise ValueError("Invalid execution run_id.")
     os.environ["PROJECT_TRANSACTION_SOURCE_SIGNATURE"] = json.dumps(source_signature)
     os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"] = signature_markdown(source_signature)
@@ -522,22 +493,7 @@ def worker(transaction_name, value, expected=None, run_id=None, data_directory=N
         validate_saved_output(result, transaction_name, outputs)
         if result["input"]["raw_input"] != value["raw_input"]:
             raise ValueError("Transaction changed raw_input.")
-        failures = []
-        if expected is not None:
-            if "status" in expected and result["status"] != expected["status"]:
-                failures.append("Unexpected status")
-            checks = directory / "validator.py"
-            if checks.is_symlink() or not checks.is_file():
-                raise ValueError("validator.py must be a regular transaction-local file.")
-            validator = load_module(checks, "validator_" + transaction_name.replace("-", "_"))
-            transaction_failures = log_execution(validator.check_result)(value, result, expected)
-            if not isinstance(transaction_failures, list) or any(not isinstance(item, str) for item in transaction_failures):
-                raise ValueError("Validator must return a list of failure strings.")
-            failures.extend(transaction_failures)
-            if any(not isinstance(item, str) for item in failures):
-                raise ValueError("Test checks must return a list of failure strings.")
-    packet = {"output": result, "failed_checks": failures} if expected is not None else result
-    print(json.dumps(packet, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
+    print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
 def invoke(transaction_name, value, **options):
@@ -546,13 +502,9 @@ def invoke(transaction_name, value, **options):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
-    if options.get("test_run"):
-        return _invoke(transaction_name, value, **options)
     timeout = options.get("timeout", 20)
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
-    if options.get("expected") is not None:
-        raise ValueError("Test expectations require test_run=True.")
     logs_directory(directory)
     # The parent owns the lock and journal; workers cannot mutate either.
     with (directory / "logs" / "index.lock").open("a") as lock:
@@ -614,23 +566,17 @@ def invoke(transaction_name, value, **options):
 
 
 @log_execution
-def _invoke(transaction_name, value, *, test_run=False, expected=None, timeout=20, run_id=None, rerun=False, fixture_files=None, index_batch=None):
+def _invoke(transaction_name, value, *, timeout=20, rerun=False, index_batch=None):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
-    if fixture_files is not None and not test_run:
-        raise ValueError("Fixture files require test_run=True.")
-    if expected is not None and not test_run:
-        raise ValueError("Test expectations require test_run=True.")
     logs_directory(directory)
     input_id = canonical_hash(value)
-    if not test_run and not rerun and index_batch is None:
+    if not rerun and index_batch is None:
         log_execution(require_new_input)(directory, input_id)
-    isolated = tempfile.TemporaryDirectory(prefix="transaction-test-") if test_run else None
-    data_root = Path(isolated.name).resolve() / "data" if isolated else DATA
-    run_id = (run_id or str(uuid.uuid4())) if test_run else input_id
+    run_id = input_id
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
@@ -640,35 +586,17 @@ def _invoke(transaction_name, value, *, test_run=False, expected=None, timeout=2
         "status": "error", "error": None, "meta_data": None,
     }
     worker_stderr = None
-    fixture_directory = None
     try:
-        if test_run:
-            temporary_root = PROJECT / ".tmp"
-            if temporary_root.is_symlink() or temporary_root.resolve() != temporary_root:
-                raise ValueError("Project .tmp must be canonical and not a symlink.")
-            temporary_root.mkdir(exist_ok=True)
-            fixture_directory = tempfile.TemporaryDirectory(prefix="transaction-fixtures-", dir=temporary_root)
-            fixture_root = Path(fixture_directory.name)
-            if fixture_files is not None and not isinstance(fixture_files, dict):
-                raise ValueError("fixture_files must map relative paths to base64 bytes.")
-            for relative, encoded in (fixture_files or {}).items():
-                path = Path(relative)
-                if (path.is_absolute() or any(part in ("", ".", "..") for part in relative.split("/"))
-                        or "\\\\" in relative):
-                    raise ValueError("Fixture paths must be canonical relative paths.")
-                target = fixture_root / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(base64.b64decode(encoded, validate=True))
-        outputs = prepare_data(transaction_name, data_root)
+        outputs = prepare_data(transaction_name, DATA)
         source_signature = source_code_signature(directory)
         completed = subprocess.run(
             [str(PYTHON), "-B", str(Path(__file__).resolve()), "--transaction", transaction_name, "--worker"],
-            input=json.dumps({"input": value, "expected": expected, "run_id": run_id, "data_directory": str(outputs), "test_run": test_run, "source_signature": source_signature, "input_directory": fixture_directory.name if fixture_directory else None, "index_batch": index_batch}), text=True, capture_output=True,
+            input=json.dumps({"input": value, "run_id": run_id, "data_directory": str(outputs), "source_signature": source_signature, "index_batch": index_batch}), text=True, capture_output=True,
             cwd=str(PROJECT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr
         packet = json.loads(completed.stdout)
-        result = packet["output"] if expected is not None else packet
+        result = packet
         validate_output(result, transaction_name, run_id)
         validate_saved_output(result, transaction_name, outputs)
         if result["input"]["raw_input"] != value["raw_input"]:
@@ -691,102 +619,22 @@ def _invoke(transaction_name, value, *, test_run=False, expected=None, timeout=2
         record["error"] = {"code": "runner_error", "message": str(exc)}
         raise
     finally:
-        if fixture_directory is not None:
-            fixture_directory.cleanup()
-        if isolated is not None:
-            isolated.cleanup()
         if worker_stderr:
             if isinstance(worker_stderr, bytes):
                 worker_stderr = worker_stderr.decode("utf-8", errors="replace")
             LOGGER.info("Worker diagnostics:\n%s", worker_stderr.rstrip())
-        if not test_run:
-            with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
-                fcntl.flock(log, fcntl.LOCK_EX)
-                log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-                log.flush()
-                os.fsync(log.fileno())
-
-
-@log_execution
-def run_tests(transaction_name, cases_path, log_path, *, timeout=20, summary=False):
-    verify_environment()
-    directory, entry = resolve_transaction(transaction_name)
-    if log_path.resolve() != (directory / "logs" / "test-report.log").resolve():
-        raise ValueError("Test results must be written to the selected transaction test-report.log.")
-    logs_directory(directory)
-    cases_bytes = cases_path.read_bytes()
-    cases = json.loads(cases_bytes)
-    source_hashes = {name.removesuffix(".py") + "_sha256": hashlib.sha256(path.read_bytes()).hexdigest()
-                     for name, path in (("implementation.py", directory / "transaction.py"),
-                                        ("validator.py", directory / "validator.py"),
-                                        ("runner.py", Path(__file__)))}
-    source_hashes["cases_sha256"] = hashlib.sha256(cases_bytes).hexdigest()
-    for case in cases:
-        validate_input(directory, entry, case["input"])
-        if not isinstance(case["expected"], dict):
-            raise ValueError("Test expectations must be JSON objects.")
-    all_passed = True
-    failed_case_ids = []
-    for case in cases:
-        value = case["input"]
-        started = datetime.now(timezone.utc).isoformat()
-        begin = time.monotonic()
-        run_id = str(uuid.uuid4())
-        actual, execution_error = None, None
-        failures = []
-        try:
-            packet = invoke(transaction_name, value, test_run=True, expected=case["expected"], timeout=timeout, run_id=run_id, fixture_files=case.get("fixture_files", {}))
-            actual = packet["output"]
-            failures.extend(packet["failed_checks"])
-        except (subprocess.SubprocessError, ValueError, OSError) as exc:
-            execution_error = str(exc)
-            if isinstance(exc, subprocess.CalledProcessError):
-                execution_error += " " + (exc.stderr or "")[-4000:]
-            failures.append("Runner execution failed")
-        record = {
-            "run_id": run_id, "case_id": case["case_id"],
-            "input_hash": canonical_hash(value),
-            **source_hashes,
-            "fixture_files_hash": canonical_hash(case.get("fixture_files", {})),
-            "python_version": sys.version,
-            "platform": sys.platform,
-            "started_at": started, "duration_ms": round((time.monotonic() - begin) * 1000),
-            "input": value, "expected": case["expected"], "actual": actual,
-            "execution_error": execution_error, "passed": not failures, "failed_checks": failures,
-        }
-        # Lock both duplicate-ID checking and append to keep concurrent writers safe.
-        with log_path.open("a+", encoding="utf-8") as log:
+        with (directory / "logs" / "run.log").open("a", encoding="utf-8") as log:
             fcntl.flock(log, fcntl.LOCK_EX)
-            log.seek(0)
-            if any(json.loads(line)["run_id"] == record["run_id"] for line in log if line.strip()):
-                raise RuntimeError("Duplicate run_id; refusing duplicate log entry")
-            log.seek(0, 2)
             log.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
             log.flush()
             os.fsync(log.fileno())
-        all_passed = all_passed and record["passed"]
-        if not record["passed"]:
-            failed_case_ids.append(record["case_id"])
-        if not summary:
-            print(json.dumps(record, ensure_ascii=False, separators=(",", ":")), flush=True)
-    if summary:
-        print(json.dumps({"transaction": transaction_name, "status": "ok" if all_passed else "error",
-                          "total_cases": len(cases), "passed_cases": len(cases) - len(failed_case_ids),
-                          "failed_cases": len(failed_case_ids), "failed_case_ids": failed_case_ids,
-                          "report": f"transactions/{transaction_name}/logs/test-report.log"},
-                         ensure_ascii=False, separators=(",", ":")), flush=True)
-    return all_passed
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--transaction", required=True, help="Project transaction folder name")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--input", help="JSON object of named transaction arguments")
-    mode.add_argument("--cases", type=Path)
-    parser.add_argument("--summary", action="store_true", help="Emit one test summary; complete records remain in logs/test-report.log")
-    parser.add_argument("--log", type=Path, help="Selected transaction test-report.log (tests only)")
+    parser.add_argument("--input", help="JSON object of named transaction arguments")
     parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
     parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
@@ -794,11 +642,7 @@ def main():
     directory, _ = resolve_transaction(args.transaction)
     if not math.isfinite(args.timeout) or not 0 < args.timeout <= 300:
         parser.error("--timeout must be greater than zero and at most 300 seconds")
-    if args.summary and (not args.cases or args.worker):
-        parser.error("--summary requires --cases and cannot be used by workers")
-    if args.log and not args.cases:
-        parser.error("--log requires --cases")
-    if args.rerun and (args.worker or args.cases or args.input is None):
+    if args.rerun and (args.worker or args.input is None):
         parser.error("--rerun requires production --input")
     if not args.worker:
         logs_directory(directory)
@@ -813,12 +657,7 @@ def main():
     resolve_transaction(args.transaction)
     if args.worker:
         payload = json.load(sys.stdin)
-        worker(args.transaction, payload["input"], payload["expected"], payload["run_id"], payload["data_directory"], payload["test_run"], payload["source_signature"], payload.get("input_directory"), payload.get("index_batch"))
-    elif args.cases:
-        passed = run_tests(args.transaction, args.cases.resolve(),
-                           (args.log or directory / "logs" / "test-report.log").resolve(), timeout=args.timeout, summary=args.summary)
-        if not passed:
-            parser.exit(1)
+        worker(args.transaction, payload["input"], payload["run_id"], payload["data_directory"], payload["source_signature"], payload.get("index_batch"))
     elif args.input is not None:
         value = json.loads(args.input)
         try:
@@ -838,7 +677,7 @@ def main():
             result = invoke(args.transaction, value, timeout=args.timeout, rerun=True)
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     else:
-        parser.error("Supply --input JSON, or --cases PATH")
+        parser.error("Supply --input JSON")
 
 
 if __name__ == "__main__":

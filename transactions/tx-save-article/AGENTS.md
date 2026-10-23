@@ -24,8 +24,7 @@ Only tx-save-article receives read access to these two producer output folders;
 arbitrary caller-specified paths receive no read grant. Existing runtime and
 transaction implementation reads and owned article writes remain required.
 Other transactions' file access is unchanged. The transaction never modifies
-either source. Isolated case tests use a runner-selected producer-shaped fixture
-root under project .tmp/; production always uses the repository root.
+either source. Source paths use the repository root.
 
 Duplicate detection uses the input paths and raw_input, not file contents; changed
 files with identical arguments still require explicit confirmation to rerun.
@@ -55,7 +54,7 @@ mapping, the explicit exception to the shared name-derived directory convention.
 It cannot choose another destination. The runner prepares and validates this root
 and injects `PROJECT_TRANSACTION_DATA_DIRECTORY`; workers cannot write the data
 root, siblings, implementation, runtime, or logs. The runner installs its macOS
-sandbox before import, and tests use isolated disposable roots.
+sandbox before import.
 
 Derive the domain from the title URL using the bookmark convention: lowercase and
 IDNA-encode the hostname, remove a trailing DNS dot, retain `www`, omit the port,
@@ -96,21 +95,12 @@ the repository root. No dependencies are added or installed.
 
 ```sh
 transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --input '{"raw_input":"Save supplied article files","page_id_file":"tools/tool-webpage-og-crawler/output/<crawler_run_id>.txt","article_file":"skills/skill-article-writer/output/<writer_run_id>.txt"}'
-
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --cases transactions/tx-save-article/test-cases.json --summary
 ```
 
 The JSON file page_id must equal the actual title URL digest.
 Follow [shared execution and logging](../AGENTS.md#logging-and-execution-requirements),
 including explicit confirmation for previously successful identical inputs.
 The parent owns append-only logs; output paths point directly at article files.
-
-`validator.py` implements the shared read-only `check_result` interface, checking
-input preservation, output identity, URL digest, metadata, exact Markdown and source
-label. Error cases in isolated empty roots check that no artifact was written.
-Expectations support `status`, `error_code`, `url`, and `output`. Tests must cover hash mismatch,
-invalid input/title URLs, exact URL hashing, labels, replacement and write isolation.
-Do not create production data directories during scaffolding or testing.
 
 ## Output array contract
 

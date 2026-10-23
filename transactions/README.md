@@ -23,26 +23,12 @@ transaction contracts for allowed source folders, validation, and replacement ru
 Stdout is one compact JSON object with `input`, `output`, `output_format`, `status`,
 `error`, and `meta_data`. Success returns an array of repository-relative files;
 failure returns null output. Diagnostics go to transaction-local `logs/runner.log`.
-Production records append to `logs/run.log`; case records to `logs/test-report.log`.
+Production records append to `logs/run.log`.
 Avoid reading logs or source payloads during routine discovery.
 
 `--timeout` bounds the worker (default 20 seconds; maximum 300). Index lock waiting
 has a separate bound of the same length. An identical successful request exits 2
 noninteractively; use `--rerun` only after explicit user confirmation.
-
-## Verify
-
-```sh
-transactions/.venv/bin/python -B transactions/test_runner.py
-transactions/.venv/bin/python -B transactions/test_index.py
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --cases transactions/tx-bookmark/test-cases.json --summary
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-save-article --cases transactions/tx-save-article/test-cases.json --summary
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-index --cases transactions/tx-index/test-cases.json --summary
-```
-
-Tests use disposable data and producer-shaped fixtures; they never use production
-data. The host must allow the tests to install their own macOS sandbox. `--summary`
-keeps terminal output small while retaining complete case records.
 
 ## Reproducibility and recovery
 
@@ -50,12 +36,6 @@ Production request identity is SHA-256 of canonical UTF-8 JSON: sorted keys,
 compact separators, literal Unicode, no non-finite numbers. Original arguments,
 including `raw_input`, participate; defaults do not. This is request identity,
 not a fingerprint of implementation or source payloads.
-
-Test records fingerprint the runner, implementation, validator, exact case file,
-and fixture mapping, and record Python version and platform. Hashes identify
-inputs; retain the corresponding source files and runtime to replay them.
-Suite source hashes are captured once before cases run: do not edit sources
-while a suite is running.
 
 Index replacement batches additionally hash both source byte streams, verify
 worker reads, and journal their original Asia/Kolkata timestamp under an exclusive

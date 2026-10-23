@@ -24,7 +24,7 @@ Optional `site_name`, `type`, `section`, `keywords`, `datePublished`, `dateModif
 
 The file is `data/bookmark/<domain_with_underscores>/<page_id>.md`, relative to the repository root. The normalized hostname retains www, omits the port, and has dots replaced by underscores. Different page IDs coexist. The same domain and page ID atomically replace the existing bookmark, even if URL or request text changes. Concurrent replacements use last replacement wins. A domain change writes to the new domain folder without deleting the old bookmark. Old log entries point to the current file contents, not historical versions.
 
-The runner creates and validates data/bookmark/ only at runtime for an authorized invocation and supplies its absolute canonical location through PROJECT_TRANSACTION_DATA_DIRECTORY before importing transaction code. This is runner-owned configuration, not a caller-selectable transaction argument. For tests, the runner must supply a disposable isolated bookmark directory and enforce the corresponding write boundary. The returned logical path remains data/bookmark/... for both modes; validators resolve it under the injected physical test destination. Workers create only domain subdirectories; they do not create the data root or their owned root. Missing configuration or a missing prepared directory fails closed with output_write_error.
+The runner creates and validates data/bookmark/ only at runtime for an authorized invocation and supplies its absolute canonical location through PROJECT_TRANSACTION_DATA_DIRECTORY before importing transaction code. This is runner-owned configuration, not a caller-selectable transaction argument. Workers create only domain subdirectories; they do not create the data root or their owned root. Missing configuration or a missing prepared directory fails closed with output_write_error.
 
 Markdown contains title, description, source fields, keywords, dates and identifier. Display text is escaped. No Image section, image URL, Original data section or raw JSON block is rendered. It is metadata for search lookup and does not include article content. No separate aggregate index is created.
 
@@ -43,27 +43,20 @@ Requires the dedicated Python 3.11+ transactions/.venv, with only standard libra
 Only tx-bookmark gains source read access to the same-project
 tool-webpage-og-crawler/output/ folder, in addition to existing runtime,
 implementation, and owned-data reads. It receives no article-writer output
-access. Source files cannot be written. Isolated case tests use a runner-owned
-producer-shaped fixtures root under project .tmp/, never production crawler outputs.
+access. Source files cannot be written.
 Source location establishes the producer boundary; execution logs are not read.
 Duplicate detection uses page_file and raw_input, not source contents; editing a
 file without changing arguments still requires explicit confirmation to rerun.
 
 The runner restricts writes to the prepared bookmark subtree, verifies the environment, owns logs, bounds execution and applies/probes the macOS sandbox before import. PROJECT_TRANSACTION_DATA_DIRECTORY is injected by the runner and cannot be supplied as a transaction argument. Path checks in transaction.py supplement OS isolation. Identical successful production inputs require explicit rerun confirmation under the [shared logging/execution contract](../AGENTS.md#logging-and-execution-requirements).
 
-## Validation and logging
+## Logging
 
-`validator.py` exposes `check_result(value: dict, actual: dict, expected: dict) -> list[str]`. It checks preserved input, metadata, output identity, required Markdown sections and absence of the Original data section. Optional expectations: `domain`, `output`, `contains` (list of substrings), `absent` (list of substrings), and `error_code`; shared runner checks `status`. Validators perform no writes or network requests and read only the current bookmark.
-
-Run the metadata cases through isolated test destinations:
-
-```sh
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-bookmark --cases transactions/tx-bookmark/test-cases.json --summary
-```
-
-Each case is validated before its disposable data root is removed. No production data/bookmark/ is created by tests. transactions/test_runner.py additionally verifies persistence, replacement, page coexistence, confirmation, timeout logging, filesystem alias rejection and denied writes to sibling data/local implementation/runtime locations in disposable projects.
-
-The parent runner writes production results to logs/run.log, test results to logs/test-report.log and Python diagnostics/timing to logs/runner.log inside transactions/tx-bookmark/. See the [shared logging requirements](../AGENTS.md#logging-and-execution-requirements). The production output attribute must copy the returned data/bookmark/... path directly. No separate execution receipt or local output/ copy is created. Production and test logs remain separate.
+The parent runner writes results to logs/run.log and Python diagnostics/timing to
+logs/runner.log inside transactions/tx-bookmark/. See the
+[shared logging requirements](../AGENTS.md#logging-and-execution-requirements).
+The output attribute copies the returned data/bookmark/... path array directly.
+No separate execution receipt or local output/ copy is created.
 
 ## Source Code Signature
 

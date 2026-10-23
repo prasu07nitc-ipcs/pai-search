@@ -55,7 +55,6 @@ tx-index. No dependencies, network, subprocesses, or runtime modifications.
 The runner grants source reads only to these two producer output folders,
 alongside required runtime/implementation/owned-data reads; other transaction
 permissions stay separate. It prepares data/index/ and applies the macOS sandbox.
-Case tests use runtime-generated producer-shaped fixtures under project .tmp/ with disposable outputs.
 
 The parent holds logs/index.lock across each production invocation, including
 shared duplicate confirmation and result logging. logs/index-attempts.jsonl is an
@@ -67,7 +66,7 @@ files and reuse that timestamp. The worker verifies the exact bytes it consumes
 against parent-supplied hashes before writes. Changed source bytes form a new
 batch. Successful duplicate inputs still require explicit --rerun confirmation.
 Legacy append-era journal records remain unchanged and are not replayed: the new
-layout never modifies old utterances.md files. Tests use no production journal.
+layout never modifies old utterances.md files.
 Removing stale contributions when revised inputs drop an entity is deferred;
 there is no automatic migration or deletion of legacy files.
 
@@ -78,7 +77,7 @@ retain known completed writes and return affected_paths in metadata. Abrupt
 interruption can leave temporary files or unreported writes; the journal blocks
 retries in this uncertain state. No rollback or automatic deletion is performed.
 
-## Results and tests
+## Results and logging
 
 Use the shared six-field envelope. input.processed_input contains page_file and
 context_file. output_format is markdown. Successful output is a unique nonempty
@@ -89,8 +88,4 @@ input_read_error, invalid_json, invalid_input, invalid_page_id, invalid_url,
 page_id_mismatch, invalid_context, invalid_date,
 output_write_error. Runner failures/timeouts remain runner errors.
 
-validator.py is read-only and checks input preservation, generated paths,
-source grouping and timestamps. Case expectations support status and error_code.
-Run --cases transactions/tx-index/test-cases.json --summary.
-Production results append to logs/run.log, test records to logs/test-report.log,
-diagnostics to logs/runner.log. Never use production index data for tests.
+Results append to logs/run.log and diagnostics to logs/runner.log.

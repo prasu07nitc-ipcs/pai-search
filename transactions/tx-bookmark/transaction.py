@@ -56,8 +56,7 @@ def _render(page: dict, domain: str) -> str:
 def _open_data_directory() -> int:
     """Open the runner-prepared data destination without following symlinks.
 
-    The runner supplies an absolute canonical directory for production or an
-    isolated test destination. This configuration does not replace OS isolation.
+    The runner supplies an absolute canonical production directory. This configuration does not replace OS isolation.
     """
     configured = os.environ.get("PROJECT_TRANSACTION_DATA_DIRECTORY", "")
     path = Path(configured)
