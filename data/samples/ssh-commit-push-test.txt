@@ -1,0 +1,3 @@
+SSH commit and push test
+Target: data-test
+Preserve the develop checkout and normal staging index.
