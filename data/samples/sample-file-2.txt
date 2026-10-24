@@ -1,0 +1,3 @@
+Sample file 2
+Target branch: data-test
+Verify data commit policy enforcement without branch switching.
