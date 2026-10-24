@@ -164,9 +164,12 @@ def require_new_input(directory, input_id):
             record = json.loads(line)
             if record.get("status") != "ok":
                 continue
-            supplied = dict(record["processed_input"])
-            if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") or record["raw_input"] is not None:
-                supplied["raw_input"] = record["raw_input"]
+            if "processed_input" in record:
+                supplied = dict(record["processed_input"])
+                if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") or record["raw_input"] is not None:
+                    supplied["raw_input"] = record["raw_input"]
+            else:
+                supplied = dict(record["transaction_input"])
             previous_id = canonical_hash(supplied)
             if previous_id == input_id:
                 raise DuplicateInputError(
@@ -553,8 +556,7 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False):
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
-        "processed_input": dict(value) if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else {key: argument for key, argument in value.items() if key != "raw_input"},
-        "raw_input": None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"], "transaction_input": None,
+        "transaction_input": dict(value),
         "output": None, "output_format": None,
         "status": "error", "error": None, "meta_data": None,
     }
@@ -578,8 +580,6 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False):
         if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") and result["input"]["processed_input"] != value:
             raise ValueError("Transaction changed supplied input.")
         record.update(
-            raw_input=result["input"]["raw_input"],
-            transaction_input=result["input"]["processed_input"],
             output=result["output"], output_format=result["output_format"],
             status=result["status"], error=result["error"],
             meta_data=result["meta_data"],

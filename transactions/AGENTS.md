@@ -96,11 +96,15 @@ once, one O_APPEND write, fsync. Short writes fail and can leave incomplete tail
 never auto-repair history. logs/runner.log records diagnostics, failures and invocation
 timing. Storage failure/termination can prevent logging. Paths do not archive old bytes.
 
-Records have exactly run_id, executed_at, processed_input, raw_input,
-transaction_input, output, output_format, status, error, meta_data. processed_input is
-supplied arguments; transaction_input is accepted result arguments. Copy accepted
-result fields unchanged. Runner failures use runner_error/runner_timeout, null output
-and null unavailable values.
+New records have exactly run_id, executed_at, transaction_input, output,
+output_format, status, error, meta_data. transaction_input contains the complete
+supplied arguments, retained even on runner failure. Do not write redundant
+processed_input or raw_input fields at the record root. Copy accepted output,
+output_format, status, error and meta_data unchanged. Runner failures use
+runner_error/runner_timeout, null output and null unavailable result values.
+The component result envelope remains unchanged. Preserve historical records;
+duplicate detection reads both legacy processed_input/raw_input records and new
+transaction_input-only records.
 
 run_id = SHA-256 of UTF-8 json.dumps(supplied_input, sort_keys=True,
 separators=(",", ":"), ensure_ascii=False, allow_nan=False). Repeated input keeps the

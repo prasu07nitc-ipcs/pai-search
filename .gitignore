@@ -4,3 +4,4 @@ dev-tasks/*
 transactions/.venv/
 transactions/**/__pycache__/
 .tmp/
+data/*
