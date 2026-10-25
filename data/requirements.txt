@@ -1,0 +1,42 @@
+# Complete approved third-party dependency closure for PyGithub.
+# Resolved for CPython 3.11 on macOS arm64; one approved wheel per package.
+# Policy: data/AGENTS.md. Not an authorization to install or execute.
+# PyPI metadata and wheel SHA-256 hashes recorded by pip dry-run resolution.
+--require-hashes
+--only-binary=:all:
+
+# Required by requests; CA certificate bundle.
+certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+
+# Required by PyNaCl and cryptography; native bindings.
+cffi==2.1.1 --hash=sha256:398aff33cee2767e3e781d2554c54bd0dff386bb437581e0d8011fde1a942ec1
+
+# Required by requests; response text decoding.
+charset-normalizer==3.5.2 --hash=sha256:3d21b8b13c7592db2ac5e544a6d83187b995257472b0c9e8351b6d507ae37ed6
+
+# Required by PyJWT[crypto]; cryptographic JWT operations.
+cryptography==50.0.2 --hash=sha256:fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb
+
+# Required by requests; international domain names.
+idna==3.20 --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+
+# Required by cffi; C declaration parsing.
+pycparser==3.12 --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e
+
+# Direct exception: GitHub REST API client (import github).
+PyGithub==2.10.0 --hash=sha256:192ada2a76e4afc7d6b37e500c9bfeba1731e6506697445a5ba1c4af8bf0b924
+
+# Required by PyGithub; JWT authentication; crypto extra enabled.
+PyJWT[crypto]==2.15.1 --hash=sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193
+
+# Required by PyGithub; cryptographic support for GitHub secrets.
+PyNaCl==1.6.2 --hash=sha256:c949ea47e4206af7c8f604b8278093b674f7c79ed0d4719cc836902bf4517465
+
+# Required by PyGithub; HTTP client.
+requests==2.34.2 --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+
+# Required by PyGithub; typing compatibility.
+typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+
+# Required by PyGithub and requests; HTTP transport.
+urllib3==2.8.0 --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3

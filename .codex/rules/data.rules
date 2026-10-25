@@ -1,0 +1,17 @@
+# Run from the parent project root. The isolated data runner enforces data-only
+# changes in the parent repository, a separate Python environment, and three data branches.
+prefix_rule(
+    pattern = ["data/.venv/bin/python", "-B", "data/runner.py", "--input"],
+    decision = "allow",
+    justification = "Launch data-only commit/push through the dedicated data sandbox runner",
+    match = [
+        "data/.venv/bin/python -B data/runner.py --input '{}'",
+        "data/.venv/bin/python -B data/runner.py --input '{}' --timeout 30",
+    ],
+    not_match = [
+        "data/.venv/bin/python -B data/runner.py --worker",
+        "data/.venv/bin/python -B data/tx-commit-and-push/commit.py",
+        "data/.venv/bin/python -m pip install example",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-commit",
+    ],
+)
