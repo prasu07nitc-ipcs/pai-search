@@ -1,0 +1,6 @@
+# Marine Minerals Administration
+
+## Sequence: **7/27**
+- Utterance: The federal Marine Minerals Administration, or MMA, funds a new five-year project involving nearly a dozen scientists and tribal partners to survey the seabed and improve identification of buried archaeological sites. The source calls it the largest historical effort to identify former settlements across 89 million submerged acres from Texas to western Florida, building on divers' research since 1989. The team spent two years integrating academic and oil-and-gas-company sonar scans and sub-bottom profiles into a submerged-landscape map. Ancient bedrock river channels indicate former freshwater routes and possible fishing, hunting and toolstone locations. This summer the team and tribal partners began surveying off eastern Texas along the offshore Trinity River. If scans support their hypothesis, they plan sediment cores that might reveal buried soil or artifacts, though direct artifact recovery is unlikely. MMA aims to protect sites from nearby oil and gas rigs or wind turbines and help future research into American migration, lifeways and sea-level adaptation.
+- Indexed At: 2026-10-26T08:12:23.770342+05:30
+- Last Validated At: 2026-10-26T08:12:23.770342+05:30
