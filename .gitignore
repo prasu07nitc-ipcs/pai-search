@@ -1,7 +1,10 @@
-.idea/*
-reports/*
-dev-tasks/*
-transactions/.venv/
-transactions/**/__pycache__/
-.tmp/
-data/*
+# Only allow the selected project data paths.
+/**
+!/data/
+!/data/articles/
+!/data/articles/**
+!/data/index/
+!/data/index/**
+!/data/bookmarks/
+!/data/bookmarks/*
+/data/bookmarks/*/
