@@ -9,9 +9,14 @@ dependency changes, direct worker invocation, Git commands, or API/UI bypass.
 
 ## Public contract
 
-Input is exactly `{page_id, files, message}`. The component owns configuration,
-approval, state refresh, execution and result acceptance; callers supply no internal
-Git fields. Do not discover files or expand directories.
+Input is exactly `{page_id, files, message, grant_file, grant_id, execution_id}`.
+The task obtains the grant Markdown file during preflight. The consumer owns
+configuration, local grant-file validation, state refresh, dispatch and result
+acceptance. grant_file is the canonical path returned by the authorisation;
+grant_id is the expected issuance ID, preventing accidental use of replacement
+permission. execution_id is a stable task invocation ID for audit correlation.
+Session comes only from platform CODEX_THREAD_ID; fail if unavailable. These fields
+are not part of the internal Git input or receipt hash. Never discover extra files.
 
 - `page_id`: 64 lowercase hexadecimal characters.
 - `files`: unique, nonempty data-relative paths shaped `<folders>/<page_id>/<file>`.
@@ -20,6 +25,8 @@ Git fields. Do not discover files or expand directories.
   Reject traversal, absolute paths, hidden components, controls, backslashes,
   logs/receipts/credentials/__pycache__, .key/.pem and runtime/tooling paths.
 - `message`: nonblank string without NUL; preserve it and the supplied file list.
+  The initial Git authorization type covers `data: index webpage <page_id>` only;
+  a different message needs a corresponding authorization type before execution.
 
 Return exactly `{input, output, output_format, status, error, meta_data}` with
 `input` equal to the original public request. Forward the accepted runner's other
@@ -28,13 +35,12 @@ Success has `error=null` and one data-relative receipt path. Failure has
 `output=null` and `error={code,message}`. Inspect status even when process exit is 0.
 Do not echo file contents or internal JSON unless requested.
 
-Before dispatch, decline yields `authorization_declined`; unavailable approval yields
-`authorization_required`. Other setup failures preserve their reported code. Include
+Before dispatch, missing or invalid grants yield `authorization_required`. Other setup failures preserve their reported code. Include
 a concrete remedy and `meta_data={committed:false,pushed:false,push_attempted:false}`.
 After dispatch, preserve known effects; absent output means uncertain state, never
 proof of no effects. Failure does not roll back.
 
-## Configuration and approval
+## Configuration and validation
 
 `git-config.json` is the only settings source. Exactly five keys are required:
 `author_name`, `author_email`, `branch`, `remote_url`, `create_branch`.
@@ -52,25 +58,33 @@ Inspect settings and live local branch state:
 data/.venv/bin/python -B data/runner.py --inspect-settings
 ```
 
-Inspection does not fetch or certify remote state. Present repository, configured
-remote/branch/author/creation policy and current target SHA in one approval request.
-Ask directly through an available native form or grouped chat prompt. No default
-selection or silence grants permission. Existing target: use its refreshed SHA,
-`create_branch=false`, `base_commit=null`. Missing target: require configured creation
-permission and explicit approval of a full existing base SHA; never infer it from HEAD.
+Inspection does not fetch or certify remote state. Use refreshed settings for
+validation. Never ask for approval here; return authorization_required if the task
+has not supplied a valid covering grant. This authorisation covers existing targets only; missing branches require a
+different development-time definition and explicit approval. Never infer HEAD.
 
-Offer approval for this invocation, or subsequent webpage-index commit-and-push runs
-in this chat. Session approval covers only the canonical repository, configured
-settings, webpage-index files beneath each supplied page ID and message
-`data: index webpage <page_id>`. Other messages/actions need separate approval.
-Store authorization only in chat memory. Revocation, changed settings/scope, a new
-chat or lost approval context requires fresh approval. One-run approval is consumed
-on dispatch, including failure. Branch disappearance or a changed creation base
-requires fresh creation approval.
+## authorisations
 
-Immediately before dispatch, inspect again and compare settings with approved scope.
-Use the refreshed expected_head; do not ask again solely because an existing branch
-advanced. Never automatically refresh/retry a compare-and-swap failure.
+| Required authorisation | Required permission |
+| --- | --- |
+| [authorization-git-commit-and-push](../../authorizations/authorization-git-commit-and-push/AUTHORIZATION.md) | Canonical webpage-index commit-and-push to the configured existing branch; all explicit output files must be covered |
+
+Only tasks execute this prerequisite. No runtime scope, duration or use-count overrides.
+Read the supplied canonical Markdown grant immediately before dispatch using this
+component's authorization.py. Validate path, expected ID, project, owning platform
+chat, active status, approval, validity interval and complete operation scope against
+current Git configuration. Missing, malformed, copied, wrong-session, revoked or
+expired grants yield authorization_required. Never call the authorisation component,
+import its framework/definition, query SQLite, claim uses, settle claims or request
+approval here. The grant file is the sole permission artifact.
+
+Validate issued terms, not the latest authorisation definition or fingerprint.
+Existing grants survive definition changes until expiry/revocation. Branch advancement
+is permitted; disappearance, changed configuration or out-of-scope operations fail.
+The task must resolve permission failures; do not silently retry. Repeated uses in
+the same chat are allowed until expiry but existing duplicate/recovery rules still
+apply. Revocation blocks subsequent validations, not already accepted dispatches;
+validity at dispatch suffices for an operation to finish after expiry.
 
 ## Dispatch
 
@@ -86,13 +100,13 @@ Build exactly these internal fields; public input values remain unchanged:
 | base_commit | null for existing target; approved full SHA for creation |
 
 ```sh
-data/.venv/bin/python -B data/runner.py --input '<complete JSON>'
+data/.venv/bin/python -B data/runner.py --input '<complete JSON>' --grant-file '<grant_file>' --grant-id '<grant_id>' --execution-id '<execution_id>'
 ```
 
 Use POSIX single-quote escaping, including embedded apostrophes. Default worker
 timeout is 20 seconds; approval interaction is outside it. The runner also accepts
-`--timeout` (>0, <=300 finite seconds) and `--rerun` only after explicit approval
-and reconciliation of an identical successful input. No automatic retries.
+`--timeout` (>0, <=300 finite seconds). These grants never authorize --rerun;
+recovery requires separate explicit approval and reconciliation. No automatic retries.
 
 Internal recovery actions require separate explicit authorization: `commit` uses
 remote_url=null; `push` requires files=[], message/author fields=null, an existing

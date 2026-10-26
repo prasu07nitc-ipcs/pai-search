@@ -12,3 +12,8 @@ data/tx-commit-and-push/receipts/
 data/index/*
 data/articles/*
 data/bookmark/*
+authorizations/.runtime/
+authorizations/**/__pycache__/
+
+# Canonical session grants, decisions and locks are private runtime state.
+authorizations/authorization-*/.runtime/

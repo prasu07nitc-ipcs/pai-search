@@ -352,9 +352,26 @@ def append_record(path, record):
         os.close(fd)
 
 
-def invoke(value, timeout=20, rerun=False):
+def authorization_adapter():
+    path = ROOT / 'tx-commit-and-push/authorization.py'
+    if path.resolve() != path or not path.is_file() or path.stat().st_nlink != 1:
+        raise ValueError('Unsafe Git authorization adapter.')
+    spec = importlib.util.spec_from_file_location('git_grant_adapter', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def invoke(value, timeout=20, rerun=False, grant_id=None, execution_id=None, grant_file=None):
     verify_environment()
     value = validate_input(value)
+    if value['action'] == 'commit-and-push':
+        if not grant_id or not execution_id or not grant_file:
+            raise ValueError('A canonical grant file, expected grant ID and stable execution ID are required.')
+        if rerun:
+            raise ValueError('Webpage grants do not authorize --rerun; obtain separate recovery authorization.')
+    elif grant_id or execution_id or grant_file:
+        raise ValueError('Webpage grants cannot authorize standalone recovery operations.')
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError('Timeout must be >0 and <=300 seconds.')
     if ROOT.name != 'data' or (ROOT / '.git').exists():
@@ -385,8 +402,13 @@ def invoke(value, timeout=20, rerun=False):
                         raise ValueError('Successful input already executed; explicit --rerun required after reconciliation.')
     record = {'run_id': run_id, 'executed_at': datetime.now(timezone.utc).isoformat(), 'transaction_input': value}
     accepted_result = None
+    authorized = False
     try:
         ssh_settings = prepare_ssh() if value['action'] != 'commit' else {}
+        if value['action'] == 'commit-and-push':
+            authorization = authorization_adapter()
+            authorization.verify(ROOT.parent, grant_file, grant_id, value, inspect_settings())
+            authorized = True
         completed = run_worker_process([str(ENV / 'bin/python'), '-I', '-B', str(Path(__file__).resolve()), '--worker'],
                                       input=json.dumps({'input': value, 'run_id': run_id}), text=True,
                                       encoding='utf-8', capture_output=True, check=True, cwd=str(ROOT), timeout=timeout,
@@ -395,13 +417,14 @@ def invoke(value, timeout=20, rerun=False):
         validate_output(result, value, run_id)
         accepted_result = result
         validate_saved_output(result, ROOT, run_id)
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         result = {'input': value, 'output': None, 'output_format': 'json',
-                  'status': 'error', 'error': {'code': 'ssh_not_configured' if isinstance(exc, SSHSetupError) else ('runner_timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'runner_error'),
-                  'message': str(exc) if isinstance(exc, SSHSetupError) else 'Data worker failed; reconcile repository/index/remote state before retrying.'},
+                  'status': 'error', 'error': {'code': 'authorization_required' if value['action']=='commit-and-push' and not authorized and not isinstance(exc,SSHSetupError) else ('ssh_not_configured' if isinstance(exc, SSHSetupError) else ('runner_timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'runner_error')),
+                  'message': str(exc) if isinstance(exc, SSHSetupError) or (value['action']=='commit-and-push' and not authorized) else 'Data worker failed; reconcile repository/index/remote state before retrying.'},
                   'meta_data': {'repository_state_uncertain': not isinstance(exc, SSHSetupError), 'remote_state_uncertain': value['action'] != 'commit' and not isinstance(exc, SSHSetupError)}}
-        if isinstance(exc, SSHSetupError):
+        if isinstance(exc, SSHSetupError) or (value['action']=='commit-and-push' and not authorized):
             result['meta_data'].update(committed=False, pushed=False, push_attempted=False)
+            result['meta_data'].update(repository_state_uncertain=False,remote_state_uncertain=False)
         if accepted_result is not None:
             result['meta_data'].update(accepted_result['meta_data'])
             if accepted_result['output']:
@@ -414,6 +437,8 @@ def invoke(value, timeout=20, rerun=False):
         except (OSError, ValueError):
             result['meta_data']['audit_incomplete'] = True
     record.update({key: result[key] for key in ('output', 'output_format', 'status', 'error', 'meta_data')})
+    if grant_id:
+        record.update(grant_id=grant_id,execution_id=execution_id,grant_file=grant_file,session_id=os.environ.get("CODEX_THREAD_ID"))
     try:
         append_record(history, record)
     except (OSError, ValueError):
@@ -485,10 +510,13 @@ def main():
     parser.add_argument('--inspect-settings', action='store_true')
     parser.add_argument('--timeout', type=float, default=20)
     parser.add_argument('--rerun', action='store_true')
+    parser.add_argument('--grant-file')
+    parser.add_argument('--grant-id')
+    parser.add_argument('--execution-id')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker:
-        if args.inspect_settings or args.input is not None or args.rerun:
+        if args.inspect_settings or args.input is not None or args.rerun or args.grant_id or args.execution_id or args.grant_file:
             parser.error('Worker mode cannot be combined with other operations.')
         payload = strict_json(sys.stdin.read())
         worker(payload['input'], payload['run_id'])
@@ -496,13 +524,13 @@ def main():
     original = None
     try:
         if args.inspect_settings:
-            if args.input is not None or args.rerun:
+            if args.input is not None or args.rerun or args.grant_id or args.execution_id or args.grant_file:
                 raise ValueError('Settings inspection cannot be combined with execution.')
             verify_environment()
             result = inspect_settings()
         elif args.input is not None:
             original = strict_json(args.input)
-            result = invoke(original, args.timeout, args.rerun)
+            result = invoke(original, args.timeout, args.rerun, args.grant_id, args.execution_id, args.grant_file)
         else:
             raise ValueError('Supply --input JSON or --inspect-settings.')
     except (OSError, ValueError, RuntimeError) as exc:

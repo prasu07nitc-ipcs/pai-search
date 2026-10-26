@@ -33,6 +33,34 @@ runner stages use separate processes. Counts are task-specific. Preflight the de
 capacity, including the orchestrator's agent slot. Do not silently lower concurrency;
 report unavailable capacity before execution unless the user authorizes a change.
 
+## Authorisations
+
+Only tasks execute authorisations and coordinate explicit human approval/revocation.
+Read dependent component definitions' optional `authorisations` sections, collect
+prerequisite names, deduplicate and execute their list in preflight before dependent
+effects. An omitted section means no authorisations are required; do not invent
+prerequisites. Definitions with no requirements must omit the section.
+Each authorisation defines all permission terms and duration at development time;
+do not resolve runtime scope, choose TTL/use limits, broaden or override its terms.
+
+Use authorizations/runner.py execute --task <canonical-name> --authorization <name>.
+The platform CODEX_THREAD_ID supplies session identity; fail if unavailable, never
+invent it. On success retain output[0] (canonical grant Markdown file) and
+meta_data.grant_id. A cache hit needs no prompt. On approval_required read/present
+the complete file, obtain explicit human approval or decline, then resume with
+--decision containing the exact request_id/token, decision, approved_by and source.
+Only successful persisted grants pass preflight. Other-session conflicts stop the
+task; do not replace, revoke or wait/retry without a human instruction. Missing
+consent stops dependent work; record an explicit decline when provided.
+
+Pass the canonical file path and expected grant ID to its respective consumer.
+Never pass a copy, memory snapshot or another session's identity. Consumers read
+and validate independently immediately before effects, with no authorisation calls
+or use accounting. Definition changes do not invalidate issued permission terms.
+Only explicit human revocation permits a task to invoke the respective authorisation's
+revoke operation with expected current ID and source reference. Grant permission
+never authorizes blind retries or changes component recovery rules.
+
 ## Prepare once, isolate each input
 
 Start preparation timing before setup. Batch independent reads of required policies,

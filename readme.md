@@ -9,6 +9,7 @@ Local tools, browser forms, context skills, and agent-executed task recipes with
 | Forms | [Forms](forms/README.md) | Form-local `AGENTS.md` | `output/<execution_id>.txt`, `logs/` |
 | Skills | `skills/skill-*/SKILL.md` | Skill-local `AGENTS.md` | `input/<run_id>.txt`, `output/<run_id>.txt`, `logs/run.log`; Markdown execution entry |
 | Tasks | [Task library](tasks/README.md) | [Shared policy](tasks/AGENTS.md) and one `TASK.md` recipe per task | Component-owned artifacts; orchestration and timing retained in chat memory |
+| Authorisations | [Executable authorisation components](authorizations/README.md) | [Authorization policy](authorizations/AGENTS.md) and type-specific contracts | Canonical session grant Markdown and lifecycle history under each authorisation’s `.runtime/` |
 
 Read only the selected entry point and its instructions. Tools and forms share a
 six-field result envelope; skills retain their own documented output schemas.

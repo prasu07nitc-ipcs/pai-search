@@ -16,6 +16,11 @@ Required input and exact selection rule; missing-input response.
 
 Required component policies/rules; existing runner templates, working directory,
 and argument serialization. Agent stages use component instructions directly.
+Resolve prerequisite lists from dependent definitions’ optional `authorisations`
+sections; an omitted section means no authorisations are needed;
+execute fixed authorisations through their runner as this task before dependent
+effects. Pass returned canonical grant-file paths and expected IDs to consumers.
+Never override permission terms; use platform chat identity and explicit human consent.
 
 ## Stages
 

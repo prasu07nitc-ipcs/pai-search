@@ -23,6 +23,23 @@ Read each linked component's instructions; skill SKILL.md links to its AGENTS.md
 The Git component owns loading git-config.json and refreshing branch state; task
 setup must not cache Git settings or approval.
 
+Read authorizations/AGENTS.md and collect prerequisite names from commit_push's
+`authorisations` section. Deduplicate and execute this list in Authorize after Validate,
+before extraction/generation/save. No runtime scope or lifetime settings are allowed.
+Use the platform CODEX_THREAD_ID for this chat; fail if unavailable. Generate a stable
+unique execution_id for this task invocation and retain it for Git audit correlation.
+
+Execute `python3 -B authorizations/runner.py execute --task task-webpage-index
+--authorization authorization-git-commit-and-push`. A valid same-session grant is
+reused without prompting. On approval_required present the complete output Markdown
+file, then resume with --decision containing request_id, exact token, decision
+(approve/decline), approved_by and source after the explicit human response. Accept
+only status=ok. Save output[0] as GF and meta_data.grant_id as G. Decline, absent consent,
+session conflict or other failures stop preflight. Never override fixed terms or
+replace another session's active grant. Do not copy the grant file.
+
+Authorization records are external permissions, not task checkpoints or retries.
+
 Prepare these runner templates; substitute the stage's exact component, complete JSON
 arguments, and timeout before dispatch. POSIX single-quote JSON, replacing each
 apostrophe with `'"'"'`. No shell interpolation or temporary input files.
@@ -50,12 +67,13 @@ path-base conflict stops dispatch; leave semantic/path-safety validation to the 
 
 `Q` is exactly `data: index webpage ` concatenated with accepted `V.page_id`, with
 no extra whitespace, body or trailers. An unavailable validator identity stops dispatch.
-`P = {"page_id": V.page_id, "files": F, "message": Q}` is the complete public request.
+`P = {"page_id": V.page_id, "files": F, "message": Q, "grant_file": GF, "grant_id": G, "execution_id": execution_id}` is the complete public request.
 Keep P in memory for response matching; do not add Git settings or runner fields.
 
 | ID | Component / instructions | Execution / timeout | Named inputs |
 | --- | --- | --- | --- |
 | validate | [tool-url-validate](../../tools/tool-url-validate/AGENTS.md) | tool runner / 20s | {"input_text": I} |
+| authorize | [Git authorization](../../authorizations/authorization-git-commit-and-push/AUTHORIZATION.md) | task-only authorisation runner / human approval outside worker timeout | fixed dependent authorisations → GF, G |
 | markdown | [tool-webpage-markdown](../../tools/tool-webpage-markdown/AGENTS.md) | tool runner / 60s | {"url": V.url, "page_id": V.page_id} |
 | metadata | [tool-webpage-metadata](../../tools/tool-webpage-metadata/AGENTS.md) | tool runner / 30s | {"url": V.url, "page_id": V.page_id} |
 | context | [skill-context-encoder](../../skills/skill-context-encoder/SKILL.md) | component agent | {"page_id": V.page_id, "markdown_file_path": D} |
@@ -73,6 +91,7 @@ total invocation time. Agent stages have no task-imposed timeout or invented run
 | Group | Stage IDs in order | Mode | Concurrency |
 | --- | --- | --- | --- |
 | Validate | validate | serial | 1 |
+| Authorize | authorize | serial | 1 |
 | Extract | markdown, metadata | parallel | 2 |
 | Generate | context, article | parallel | 2 |
 | Save | bookmark, index, save_article | parallel | 3 |
@@ -81,13 +100,15 @@ total invocation time. Agent stages have no task-imposed timeout or invented run
 ## Result
 
 Identity: V.page_id as page_id. Link the saved article, bookmark, relevant
-index/context artifacts and Git receipt. All nine stages must succeed; accepted
+index/context artifacts and Git receipt. All ten stages must succeed; accepted
 successful cache hits count, while duplicate refusals terminate the task.
 
 Invoke commit_push once with P as a role in this active chat. The component owns
-configuration, explicit approval, branch refresh, runner execution and receipt
-verification. Do not add a prepare/approve exchange, internal Git inputs, direct data
-runner calls or task-specific Git recovery. A task request alone grants no Git approval.
+configuration, grant validation, branch refresh, runner execution and receipt
+verification. Pass GF, G and the retained execution_id in P; only the Git component
+maps GF/G and execution_id to runner flags and validates the file locally. Do not call the data runner
+from the task orchestrator or add task-specific Git recovery. The user grants
+permission during preflight, not when this final stage becomes ready.
 
 Accept its final six-field public result: input must equal P, status must be ok,
 error must be null and output must contain its accepted receipt. Preserve the returned
