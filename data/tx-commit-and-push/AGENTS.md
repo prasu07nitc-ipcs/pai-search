@@ -1,146 +1,140 @@
 # tx-commit-and-push
 
-Authoritative instructions and input/output contract for this agent. Use only the
-parent repository through data/runner.py → commit.py:commit; ssh.py stays separate.
-Only explicitly authorized Git operations are permitted. Implementation, dependency
-approval and SSH setup do not authorize a commit or push.
+Sole role authorized to perform repository Git operations, exclusively through
+`data/runner.py`. Run in the active chat from the parent repository root; do not
+create another chat. Implementation or setup requests never authorize Git effects.
+Read `.codex/rules/data.rules` once per chat; reread instructions when changed.
+Requires macOS, Python 3.11+, and the existing `data/.venv`. No runtime installation,
+dependency changes, direct worker invocation, Git commands, or API/UI bypass.
 
-## Execution
+## Public contract
 
-Run from the parent project root using the configured data/.venv, Python 3.11+ and
-macOS. Read .codex/rules/data.rules; retain setup within the chat and reread changed
-instructions rather than rediscovering interfaces from logs.
+Input is exactly `{page_id, files, message}`. The component owns configuration,
+approval, state refresh, execution and result acceptance; callers supply no internal
+Git fields. Do not discover files or expand directories.
+
+- `page_id`: 64 lowercase hexadecimal characters.
+- `files`: unique, nonempty data-relative paths shaped `<folders>/<page_id>/<file>`.
+  Require a folder before the exact ID directory and a file below it. Regular,
+  unaliased sources only; missing paths must be tracked deletions on the target/base.
+  Reject traversal, absolute paths, hidden components, controls, backslashes,
+  logs/receipts/credentials/__pycache__, .key/.pem and runtime/tooling paths.
+- `message`: nonblank string without NUL; preserve it and the supplied file list.
+
+Return exactly `{input, output, output_format, status, error, meta_data}` with
+`input` equal to the original public request. Forward the accepted runner's other
+five fields unchanged. `output_format` is `json`; `status` is `ok` or `error`.
+Success has `error=null` and one data-relative receipt path. Failure has
+`output=null` and `error={code,message}`. Inspect status even when process exit is 0.
+Do not echo file contents or internal JSON unless requested.
+
+Before dispatch, decline yields `authorization_declined`; unavailable approval yields
+`authorization_required`. Other setup failures preserve their reported code. Include
+a concrete remedy and `meta_data={committed:false,pushed:false,push_attempted:false}`.
+After dispatch, preserve known effects; absent output means uncertain state, never
+proof of no effects. Failure does not roll back.
+
+## Configuration and approval
+
+`git-config.json` is the only settings source. Exactly five keys are required:
+`author_name`, `author_email`, `branch`, `remote_url`, `create_branch`.
+No environment, local/global/system Git config, CLI branch selection, chat defaults
+or inline overrides may supply these settings. Edit the file to change them.
+Author fields may be null during setup, but commits require nonblank values without
+NUL, CR, LF or angle brackets. Branch must be data-dev, data-test or data-prod;
+remote must be `git@github.com:<owner>/<repo>.git`; creation policy is boolean.
+The runner rejects missing/malformed files, aliases, extra keys and conflicting inputs.
+Repository origin is read only to validate the configured remote.
+
+Inspect settings and live local branch state:
 
 ```sh
-data/.venv/bin/python -B data/runner.py --input '<complete JSON object>'
+data/.venv/bin/python -B data/runner.py --inspect-settings
 ```
 
-POSIX single-quote JSON, escaping embedded apostrophes safely. Optional trailing
-flags: --timeout (finite seconds, >0 and <=300; default 20), --rerun (explicit
-confirmation to repeat identical successful input after reconciliation). No direct
-component/--worker invocation, Git-write commands, API/UI bypass or transactions/
-Git writes. No force, branch switching, reset/stash, rollback, automatic retry or
-removal of someone else's locks. Read-only inspection is allowed.
+Inspection does not fetch or certify remote state. Present repository, configured
+remote/branch/author/creation policy and current target SHA in one approval request.
+Ask directly through an available native form or grouped chat prompt. No default
+selection or silence grants permission. Existing target: use its refreshed SHA,
+`create_branch=false`, `base_commit=null`. Missing target: require configured creation
+permission and explicit approval of a full existing base SHA; never infer it from HEAD.
 
-Preserve working files, checked-out branch and normal staging. The worker scans
-metadata aliases before sandboxing/import; component checks cover paths, repository,
-config, origin and target. A private index starts from the target/base; commit-tree
-creates the commit and compare-and-swap update-ref advances the target. Locks,
-checkout snapshots and sandbox denials protect HEAD/index. Independent host writers
-can race and are not controlled by agent policy; report observed changes and stop.
+Offer approval for this invocation, or subsequent webpage-index commit-and-push runs
+in this chat. Session approval covers only the canonical repository, configured
+settings, webpage-index files beneath each supplied page ID and message
+`data: index webpage <page_id>`. Other messages/actions need separate approval.
+Store authorization only in chat memory. Revocation, changed settings/scope, a new
+chat or lost approval context requires fresh approval. One-run approval is consumed
+on dispatch, including failure. Branch disappearance or a changed creation base
+requires fresh creation approval.
 
-## Environment and SSH
+Immediately before dispatch, inspect again and compare settings with approved scope.
+Use the refreshed expected_head; do not ask again solely because an existing branch
+advanced. Never automatically refresh/retry a compare-and-swap failure.
 
-Use isolated Python imports; only standard-library imports are currently used.
-Approved optional Git/GitHub packages and their entire dependency closure are pinned
-with hashes in ../requirements.txt. Additions, removals, upgrades, hash changes,
-environment creation and installation require explicit authorization. Install only
-approved wheels with --require-hashes --only-binary=:all:; never install, resolve or
-repair during execution. Reject unlisted/mismatched installed packages; future
-third-party imports also require installed-artifact verification. Dependency approval
-grants no additional access.
+## Dispatch
 
-The worker reads data/ and parent Git metadata, writes only permitted Git metadata
-and owned receipts, and executes approved Git/SSH/runtime binaries. The parent owns
-logs. Commits deny network; push permits outbound access, not a GitHub-only firewall.
-These grants do not extend to transactions/.
+Build exactly these internal fields; public input values remain unchanged:
 
-Automatic/chat pushes require a repository-authorized key already loaded in an
-accessible SSH agent and verified GitHub entry in ~/.ssh/known_hosts. No runner key
-loading/generation, SSH edits, host-key acceptance or interactive setup. The generated
-launcher uses /usr/bin/ssh for GitHub receive-pack, ignores user SSH config and
-disables prompts, forwarding, proxies and host-key writes. No tokens, private-key
-file reads, shell, credential helpers, hooks or signing. Authentication can fail after
-a local commit; never fall back or retry automatically.
-
-## Input
-
-
-Exactly eleven required fields, finite JSON, no defaults/extras. SHA means a full
-40-character lowercase hexadecimal commit ID. Files are relative to data/.
-
-| Field | Type | Requirement |
-| --- | --- | --- |
-| action | string | commit, push, or commit-and-push |
-| page_id | string | Exactly 64 lowercase hexadecimal characters; required for every action |
-| files | string[] | Unique selected paths; nonempty for commits, [] for push |
-| message | string/null | Nonblank Git commit message without NUL; null for push |
-| branch | string | data-dev, data-test or data-prod; same remote branch |
-| expected_head | string/null | Existing target SHA; null only for creation |
-| remote_url | string/null | null for commit; otherwise git@github.com:<owner>/<repo>.git matching origin |
-| author_name | string/null | Explicit nonblank author/committer name; null for push |
-| author_email | string/null | Explicit nonblank author/committer email; null for push |
-| create_branch | boolean | true explicitly authorizes creating a missing target |
-| base_commit | string/null | Explicit existing starting SHA for creation; otherwise null |
-
-Existing target: create_branch=false, expected_head=<target SHA>, base_commit=null.
-Missing target: create_branch=true, expected_head=null, base_commit=<starting SHA>.
-Creation requires a commit action and a still-absent target. Push-only requires an
-existing target and null message/author fields. No unborn-repository bootstrap.
-Author fields forbid NUL, CR, LF and angle brackets.
-
-Commit targets cannot be checked out in any registered worktree; push-only can use
-a checked-out target. Only the parent repository is accepted: no nested data/.git,
-linked checkout, active merge/rebase/cherry-pick/revert/bisect, shallow/alternate history
-or metadata aliases. Unrelated inherited application history remains unchanged.
-
-Paths reject absolute/traversal/empty components, backslashes, controls, aliases,
-hidden components, logs/receipts/credentials/__pycache__ components, .key/.pem files,
-and runtime/tooling: commit/, tx-commit-and-push/, runner.py, requirements.txt,
-AGENTS.md, README.md. Sources are regular unaliased files;
-missing paths must be tracked deletions in the target/base. Git sees literal data/<path>.
-
-Each selected path must have the form <folders>/<page_id>/<file or nested file>:
-one or more folder components before an exact page_id directory, and a file below it.
-Examples: bookmark/<page_id>/meta.md, articles/domain/<page_id>/article.md,
-index/category/domain/<page_id>/nested/context.md. Substrings and matching filenames
-do not qualify. Mixed page IDs are rejected before Git effects; no automatic discovery
-or directory expansion. Push-only keeps files=[]; page_id labels the request and
-does not filter or certify the contents/history of the explicit SHA being pushed.
-
-Local Git config accepts only core.{repositoryformatversion,filemode,bare,
-logallrefupdates,ignorecase,precomposeunicode}, user.{name,email}, remote.origin.{url,
-fetch}, and branch.<name>.{remote,merge,vscode-merge-base}. Branch-name matching uses
-[A-Za-z0-9._/-]+. VS Code metadata is ignored; ambiguous multiple origin URLs fail.
-Push normalizes GitHub HTTPS/ssh:// origins for repository comparison but uses SSH.
-
-## Output
-
-Exactly six top-level fields; valid handled failures can exit 0. Always inspect status.
-Report concise status, target/SHA, receipt or original error and known partial effects.
-Do not echo file contents or full input/output JSON unless requested.
-
-| Field | Requirement |
+| Field | Value |
 | --- | --- |
-| input | Complete supplied eleven-field object, directly |
-| output | Success: ["tx-commit-and-push/receipts/<run_id>.json"] relative to data/; failure: null |
-| output_format | json |
-| status | ok or error |
-| error | null on success; otherwise exactly {code:nonempty string,message:nonempty string} |
-| meta_data | Available effect/progress fields; may be empty before target validation |
+| action | `commit-and-push` |
+| page_id, files, message | Original public inputs |
+| branch, remote_url, author_name, author_email | Approved configuration |
+| expected_head | Refreshed target SHA, or null for approved creation |
+| create_branch | false for existing target; true for approved missing target |
+| base_commit | null for existing target; approved full SHA for creation |
 
-run_id is SHA-256 of UTF-8 json.dumps(input, sort_keys=True, separators=(",", ":"),
-ensure_ascii=False, allow_nan=False). A receipt contains {input:<supplied input>,
-...meta_data}, never file contents or credentials. Logs are agent-local, append-only;
-historical records/old receipt paths remain unchanged.
+```sh
+data/.venv/bin/python -B data/runner.py --input '<complete JSON>'
+```
 
-After target validation metadata includes branch, previous_head, commit_sha,
-committed, pushed, push_attempted, staged_paths and remote_url. Commit progress can
-add commit_attempted, candidate_commit_sha, base_commit, branch_created,
-checkout_preserved, index_updated=false. staged_paths use parent-relative data/ paths.
-Push progress adds remote_state_uncertain=true, cleared after reported success.
-Push-only returns committed=false, requested commit_sha and staged_paths=[].
+Use POSIX single-quote escaping, including embedded apostrophes. Default worker
+timeout is 20 seconds; approval interaction is outside it. The runner also accepts
+`--timeout` (>0, <=300 finite seconds) and `--rerun` only after explicit approval
+and reconciliation of an identical successful input. No automatic retries.
 
-Failure is not rollback. A failed push may have committed=true and uncertain remote
-state; reconcile before a separately authorized push-only recovery. Concurrent external
-changes after a commit set checkout_preserved=false and stop push. Worker failure or
-timeout reports repository_state_uncertain/remote_state_uncertain when effects are
-unknown. Termination may leave locks/temp files; never auto-delete stale locks.
+Internal recovery actions require separate explicit authorization: `commit` uses
+remote_url=null; `push` requires files=[], message/author fields=null, an existing
+target SHA and base_commit=null. All actions retain the configured branch; supplied
+settings must match the file. Omitted branch resolves from configuration and omitted
+create_branch is false. The public operation remains commit-and-push.
 
-Audit append failure returns audit_write_failed with known effects retained,
-audit_incomplete=true and available saved_receipts/operation_error. Diagnostic-log
-failure also marks audit_incomplete. Receipt failure does not undo Git effects.
-Invalid CLI/input/runtime/storage or corrupt history rejected before invocation can
-exit nonzero without JSON. Process termination can prevent any result; missing output
-never proves that Git state is unchanged. History appends are single writes with fsync,
-not transactional with Git or receipts; partial tails are not automatically repaired.
+## Execution guarantees and limits
+
+The worker validates the primary repository, safe local config, origin, target and
+paths. Reject nested/linked repositories, shallow/alternate history, metadata aliases,
+active operations and checked-out commit targets in any registered worktree.
+A private index starts from the target/base and stages only explicit files, including
+ignored outputs. Compare-and-swap advances the target; working files, HEAD and normal
+index stay unchanged. External writers can race; observed checkout changes stop push.
+Do not force-push, switch branches, reset, stash, roll back or remove others' locks.
+
+Sandboxing precedes component import. Commit-only denies network; pushing permits
+outbound access. Push uses the fixed `ssh.py` transport, a previously authorized key
+in an accessible SSH agent and verified GitHub known_hosts. No key loading/generation,
+SSH configuration changes, host-key acceptance, credential fallback or prompts.
+Dependencies remain pinned in `data/requirements.txt`; no install/repair during a run.
+
+## Results and recovery
+
+The runner validates the six-field envelope and exact regular, unaliased receipt,
+including equality of receipt input/effects with the returned result. Accept success
+only after these checks. Receipt path is
+`tx-commit-and-push/receipts/<run_id>.json`; run_id is SHA-256 of UTF-8
+`json.dumps(internal_input,sort_keys=True,separators=(",",":"),ensure_ascii=False,allow_nan=False)`.
+Default expansion happens before hashing. File order is preserved. Commits use real
+execution timestamps, so repeat execution does not promise the same commit SHA.
+
+After target validation metadata records branch, previous_head, commit_sha,
+committed, pushed, push_attempted, staged_paths and remote_url. Additional fields
+report creation, candidate SHA, checkout preservation and uncertainty. staged_paths
+are parent-relative `data/` paths. Preserve all metadata; do not infer omitted effects.
+Failed push can leave a local commit and uncertain remote state; reconcile before a
+separately approved recovery. Timeout or missing worker output requires reconciliation
+of repository/index/remote. Never automatically delete leftover locks or temp files.
+
+Audit/receipt failures do not undo Git effects. Audit failures retain known effects,
+mark audit_incomplete and may include saved_receipts/operation_error. Logs append
+with fsync but are not transactional with Git or receipts; do not repair history tails
+automatically. Report the original error, known effects and receipt when available.

@@ -1,6 +1,6 @@
 # PAI search
 
-Local tools, browser forms, context skills, and agent-executed resumable tasks with explicit contracts.
+Local tools, browser forms, context skills, and agent-executed task recipes with explicit contracts.
 
 | Capability | Discovery | Detailed contract | Saved data |
 | --- | --- | --- | --- |
@@ -8,7 +8,7 @@ Local tools, browser forms, context skills, and agent-executed resumable tasks w
 | Transactions | [Transactions](transactions/README.md) | [Transactions policy](transactions/AGENTS.md) | Persistent files under exclusively owned `data/<transaction_name>/` destinations; tx-bookmark; execution logs under the transaction directory |
 | Forms | [Forms](forms/README.md) | Form-local `AGENTS.md` | `output/<execution_id>.txt`, `logs/` |
 | Skills | `skills/skill-*/SKILL.md` | Skill-local `AGENTS.md` | `input/<run_id>.txt`, `output/<run_id>.txt`, `logs/run.log`; Markdown execution entry |
-| Tasks | [Tasks](tasks/README.md), `tasks/task-*/TASK.md` | Task-local `INPUT.md` for validation and `AGENTS.md` with procedure, workflow diagram, and recovery | Run checkpoints in `checkpoints/<run_id>.json`, component output maps in `output/<run_id>.json`, and append-only `logs/run.log` per task |
+| Tasks | [Task library](tasks/README.md) | [Shared policy](tasks/AGENTS.md) and one `TASK.md` recipe per task | Component-owned artifacts; orchestration and timing retained in chat memory |
 
 Read only the selected entry point and its instructions. Tools and forms share a
 six-field result envelope; skills retain their own documented output schemas.
@@ -20,29 +20,6 @@ Tools require macOS and the existing Python 3.11+ `tools/.venv`; forms use Pytho
 3.10+ standard library. Nothing installs or repairs dependencies automatically.
 Run tools only through their runner. Forms bind to loopback and support one owning
 server process per storage root. They are trusted local code, not public services.
-
-## Verification
-
-`test_project.py` is for validation and testing only; production executions do not
-depend on it. From this directory, use the existing project environment:
-
-```sh
-# Run contract checks and tool/form regression tests
-tools/.venv/bin/python -B test_project.py
-
-# Also verify macOS worker isolation
-tools/.venv/bin/python -B test_project.py --sandbox
-
-# Show available options
-tools/.venv/bin/python -B test_project.py --help
-```
-
-This checks discovery contracts, task instructions/links, tool and form regressions, and macOS worker
-isolation. Tests use disposable directories and require localhost socket access;
-they do not fetch external pages or write production execution records. A failed
-suite exits nonzero. Skill metadata checks here cover the repository conventions;
-the system skill-creator validator additionally checks complete YAML frontmatter.
-Semantic skill fidelity still requires representative input/output review.
 
 ## Performance and operational bounds
 

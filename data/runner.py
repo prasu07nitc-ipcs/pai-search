@@ -26,6 +26,44 @@ ROOT = Path(__file__).resolve().parent
 ENV = ROOT / ".venv"
 FIELDS = {'action', 'page_id', 'files', 'message', 'branch', 'expected_head', 'remote_url', 'author_name', 'author_email', 'create_branch', 'base_commit'}
 BRANCHES = {'data-dev', 'data-test', 'data-prod'}
+CONFIG_PATH = ROOT / 'tx-commit-and-push' / 'git-config.json'
+
+def strict_json(source):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON field: ' + key)
+            result[key] = value
+        return result
+    def reject_constant(value):
+        raise ValueError('Nonfinite JSON number: ' + value)
+    return json.loads(source, object_pairs_hook=unique, parse_constant=reject_constant)
+
+
+def load_git_config():
+    """Load the sole source of configurable Git settings; never use fallbacks."""
+    if CONFIG_PATH.resolve() != CONFIG_PATH:
+        raise ValueError('git-config.json must be a regular unaliased file.')
+    fd = os.open(CONFIG_PATH, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'r', encoding='utf-8') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('git-config.json must be a regular unaliased file.')
+        value = strict_json(stream.read())
+    fields = {'author_name', 'author_email', 'branch', 'remote_url', 'create_branch'}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError('git-config.json must contain exactly author_name, author_email, branch, remote_url, create_branch.')
+    if not isinstance(value['branch'], str) or value['branch'] not in BRANCHES or type(value['create_branch']) is not bool:
+        raise ValueError('Invalid branch or create_branch in git-config.json.')
+    for key in ('author_name', 'author_email'):
+        item = value[key]
+        if item is not None and (not isinstance(item, str) or not item.strip() or any(c in item for c in '\x00\r\n<>')):
+            raise ValueError('Invalid ' + key + ' in git-config.json.')
+    remote = value['remote_url']
+    if not isinstance(remote, str) or re.fullmatch(r'git@github\.com:[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+\.git', remote) is None or remote.rsplit('/', 1)[-1] in ('.git', '..git'):
+        raise ValueError('Set an explicit GitHub SSH remote_url in git-config.json.')
+    return value
 
 
 def input_id(value):
@@ -52,8 +90,21 @@ def verify_environment():
 
 
 def validate_input(value):
-    if not isinstance(value, dict) or set(value) != FIELDS:
-        raise ValueError('Supply exactly action, page_id, files, message, branch, expected_head, remote_url, author_name, author_email, create_branch, base_commit.')
+    optional = {'branch', 'create_branch'}
+    if not isinstance(value, dict) or not FIELDS - optional <= set(value) or not set(value) <= FIELDS:
+        raise ValueError('Supply action, page_id, files, message, expected_head, remote_url, author_name, author_email, base_commit, and optionally branch and create_branch; no extra fields.')
+    settings = load_git_config()
+    value = {'branch': settings['branch'], 'create_branch': False, **value}
+    required = {'branch': settings['branch'],
+                'remote_url': None if value['action'] == 'commit' else settings['remote_url'],
+                'author_name': None if value['action'] == 'push' else settings['author_name'],
+                'author_email': None if value['action'] == 'push' else settings['author_email']}
+    if any(value[key] != item for key, item in required.items()):
+        raise ValueError('Git settings must match git-config.json; edit that file instead of supplying overrides.')
+    if value['action'] != 'push' and any(settings[key] is None for key in ('author_name', 'author_email')):
+        raise ValueError('Fill author_name and author_email in git-config.json before committing.')
+    if value['create_branch'] and not settings['create_branch']:
+        raise ValueError('Branch creation is disabled in git-config.json.')
     if not isinstance(value['page_id'], str) or re.fullmatch(r'[0-9a-f]{64}', value['page_id']) is None:
         raise ValueError('page_id must contain exactly 64 lowercase hexadecimal characters.')
     if not isinstance(value['branch'], str) or not isinstance(value['action'], str) or value['branch'] not in BRANCHES or value['action'] not in ('commit', 'push', 'commit-and-push'):
@@ -68,6 +119,7 @@ def validate_input(value):
     if type(value['create_branch']) is not bool:
         raise ValueError('create_branch must be a boolean.')
     json.dumps(value, allow_nan=False)
+    return value
 
 
 def validate_directory(root):
@@ -231,11 +283,15 @@ def validate_saved_output(result, root, run_id):
     folder = root / 'tx-commit-and-push/receipts'
     if folder.resolve() != folder:
         raise ValueError('Receipt directory must not contain aliases.')
-    fd = os.open(folder / (run_id + '.json'), os.O_RDONLY | os.O_NOFOLLOW)
+    fd = os.open(folder / (run_id + '.json'), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise ValueError('Receipt must be a regular unaliased file.')
+        with os.fdopen(os.dup(fd), 'r', encoding='utf-8') as stream:
+            receipt = strict_json(stream.read())
+        if receipt != {'input': result['input'], **result['meta_data']}:
+            raise ValueError('Receipt contents do not match the returned input and effects.')
     finally:
         os.close(fd)
 
@@ -267,7 +323,7 @@ def run_worker_process(command, **options):
 
 def worker(value, run_id):
     verify_environment()
-    validate_input(value)
+    value = validate_input(value)
     expected = input_id(value)
     if run_id != expected:
         raise ValueError('Invalid run ID.')
@@ -298,7 +354,7 @@ def append_record(path, record):
 
 def invoke(value, timeout=20, rerun=False):
     verify_environment()
-    validate_input(value)
+    value = validate_input(value)
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError('Timeout must be >0 and <=300 seconds.')
     if ROOT.name != 'data' or (ROOT / '.git').exists():
@@ -324,24 +380,32 @@ def invoke(value, timeout=20, rerun=False):
                 if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                     raise ValueError('History must be a regular unaliased file.')
                 for line in stream:
-                    previous = json.loads(line)
+                    previous = strict_json(line)
                     if previous['run_id'] == run_id and previous['status'] == 'ok':
                         raise ValueError('Successful input already executed; explicit --rerun required after reconciliation.')
     record = {'run_id': run_id, 'executed_at': datetime.now(timezone.utc).isoformat(), 'transaction_input': value}
+    accepted_result = None
     try:
         ssh_settings = prepare_ssh() if value['action'] != 'commit' else {}
         completed = run_worker_process([str(ENV / 'bin/python'), '-I', '-B', str(Path(__file__).resolve()), '--worker'],
                                       input=json.dumps({'input': value, 'run_id': run_id}), text=True,
                                       encoding='utf-8', capture_output=True, check=True, cwd=str(ROOT), timeout=timeout,
                                       env={**os.environ, **ssh_settings})
-        result = json.loads(completed.stdout)
+        result = strict_json(completed.stdout)
         validate_output(result, value, run_id)
+        accepted_result = result
         validate_saved_output(result, ROOT, run_id)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         result = {'input': value, 'output': None, 'output_format': 'json',
                   'status': 'error', 'error': {'code': 'ssh_not_configured' if isinstance(exc, SSHSetupError) else ('runner_timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'runner_error'),
                   'message': str(exc) if isinstance(exc, SSHSetupError) else 'Data worker failed; reconcile repository/index/remote state before retrying.'},
                   'meta_data': {'repository_state_uncertain': not isinstance(exc, SSHSetupError), 'remote_state_uncertain': value['action'] != 'commit' and not isinstance(exc, SSHSetupError)}}
+        if isinstance(exc, SSHSetupError):
+            result['meta_data'].update(committed=False, pushed=False, push_attempted=False)
+        if accepted_result is not None:
+            result['meta_data'].update(accepted_result['meta_data'])
+            if accepted_result['output']:
+                result['meta_data']['saved_receipts'] = accepted_result['output']
         diagnostics = getattr(exc, 'stderr', '') or ''
         if isinstance(diagnostics, bytes):
             diagnostics = diagnostics.decode('utf-8', errors='replace')
@@ -364,20 +428,89 @@ def invoke(value, timeout=20, rerun=False):
     return result
 
 
+def inspect_settings():
+    """Read local settings and refs without invoking Git or changing metadata."""
+    settings = load_git_config()
+    branch = settings['branch']
+    metadata = ROOT.parent / '.git'
+    if (ROOT / '.git').exists():
+        raise ValueError('Nested data repository is unsupported.')
+    validate_directory(metadata)
+
+    def read_metadata(path):
+        if path.resolve() != path:
+            raise ValueError('Git reference aliases are forbidden.')
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            return None
+        with os.fdopen(fd, 'r', encoding='utf-8') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ValueError('Git references must be regular unaliased files.')
+            return stream.read()
+
+    packed = {}
+    packed_path = metadata / 'packed-refs'
+    packed_text = read_metadata(packed_path)
+    if packed_text is not None:
+        for line in packed_text.splitlines():
+            if not line or line.startswith(('#', '^')):
+                continue
+            sha, ref = line.split(' ', 1)
+            if ref in packed or re.fullmatch(r'[0-9a-f]{40}', sha) is None:
+                raise ValueError('Invalid packed refs.')
+            packed[ref] = sha
+
+    def resolve(ref):
+        if not ref.startswith('refs/') or any(
+                part in ('', '.', '..') for part in ref.split('/')):
+            raise ValueError('Invalid symbolic reference.')
+        path = metadata / ref
+        text = read_metadata(path)
+        value = text.strip() if text is not None else packed.get(ref)
+        if value is not None and value.startswith('ref: '):
+            raise ValueError('Target must be a direct branch reference.')
+        if value is not None and re.fullmatch(r'[0-9a-f]{40}', value) is None:
+            raise ValueError('Invalid reference SHA.')
+        return value
+
+    head = resolve('refs/heads/' + branch)
+    return {**settings, 'expected_head': head, 'base_commit': None}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input')
+    parser.add_argument('--inspect-settings', action='store_true')
     parser.add_argument('--timeout', type=float, default=20)
     parser.add_argument('--rerun', action='store_true')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker:
-        payload = json.load(sys.stdin)
+        if args.inspect_settings or args.input is not None or args.rerun:
+            parser.error('Worker mode cannot be combined with other operations.')
+        payload = strict_json(sys.stdin.read())
         worker(payload['input'], payload['run_id'])
-    elif args.input is not None:
-        print(json.dumps(invoke(json.loads(args.input), args.timeout, args.rerun), ensure_ascii=False, allow_nan=False, separators=(',', ':')))
-    else:
-        parser.error('Supply --input JSON')
+        return
+    original = None
+    try:
+        if args.inspect_settings:
+            if args.input is not None or args.rerun:
+                raise ValueError('Settings inspection cannot be combined with execution.')
+            verify_environment()
+            result = inspect_settings()
+        elif args.input is not None:
+            original = strict_json(args.input)
+            result = invoke(original, args.timeout, args.rerun)
+        else:
+            raise ValueError('Supply --input JSON or --inspect-settings.')
+    except (OSError, ValueError, RuntimeError) as exc:
+        result = {'input': original, 'output': None, 'output_format': 'json',
+                  'status': 'error', 'error': {'code': 'preflight_failed', 'message': str(exc)},
+                  'meta_data': {'committed': False, 'pushed': False, 'push_attempted': False}}
+    print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(',', ':')))
+
 
 
 if __name__ == '__main__':

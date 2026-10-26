@@ -4,4 +4,11 @@ dev-tasks/*
 transactions/.venv/
 transactions/**/__pycache__/
 .tmp/
-data/*
+transactions/**/logs/
+data/.venv/
+data/**/__pycache__/
+data/tx-commit-and-push/logs/
+data/tx-commit-and-push/receipts/
+data/index/*
+data/articles/*
+data/bookmark/*

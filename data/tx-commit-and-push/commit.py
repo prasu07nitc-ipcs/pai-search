@@ -223,7 +223,8 @@ def _local_commit(root, env, files, message, branch, expected_head, base_commit,
             if not (root / path).exists():
                 # A deletion must be tracked on the target/base, not the checkout.
                 _git(root, private, 'ls-files', '--error-unmatch', '--', path)
-        _git(root, private, 'add', '--all', '--', *files)
+        # Explicit validated outputs may be ignored by repository-wide rules.
+        _git(root, private, 'add', '--force', '--all', '--', *files)
         staged = [p for p in _git(root, private, 'diff', '--cached', '--name-only',
                                  '--no-renames', '-z', base).split('\x00') if p]
         details['staged_paths'] = staged
