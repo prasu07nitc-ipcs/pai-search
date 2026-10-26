@@ -1,5 +1,8 @@
 # PAI search
 
+> The `data-test` branch is only for storing data produced by the pai-search project.
+> Code is allowed only in `data/tx-commit-and-push/`; no other code is allowed on this branch.
+
 Local tools, browser forms, context skills, and agent-executed resumable tasks with explicit contracts.
 
 | Capability | Discovery | Detailed contract | Saved data |
