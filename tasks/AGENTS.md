@@ -86,8 +86,39 @@ the final report described below. Preserve historical task-framework files.
 
 ## Timing and report
 
-Use an available persistent clock context with wall timestamps and monotonic readings;
-verify it before first dispatch. Capture each invocation immediately before dispatch
+Use the shared in-memory [clock utility](clock.mjs) in a persistent JavaScript
+context. Load it before setup and create a new clock for every input, including
+follow-up URLs. Never implement an ad hoc mark/reset helper or replace a clock's
+internal state. The utility is timing support, not a task runtime or log; it has
+no filesystem, component execution, or environment effects.
+
+In the persistent Node REPL, resolve the repository root explicitly and initialize:
+
+```javascript
+var taskClockModule = await import(pathToFileURL(repoRoot + '/tasks/clock.mjs').href);
+var taskClock = taskClockModule.createTaskClock(stageIds);
+```
+
+Import `pathToFileURL` from `node:url`; `stageIds` is the selected recipe's exact
+stage-ID array. Reuse the loaded module while unchanged, but always call the factory
+for the next input. Use methods on the current `taskClock` directly; do not retain
+method aliases, closures over an earlier clock, or a separate mutable marks object.
+Before first dispatch, verify `taskClock.snapshot().preparation` and that all stages
+are `not run`. Keep the same clock object and persistent context through capture.
+
+Call `taskClock.dispatch(stageId)` immediately before each individual launch,
+including parallel siblings. Call `taskClock.settle(stageId, status, cacheReuse)`
+only after acceptance or failure settlement and artifact checks; status is
+`succeeded`, `failed`, `cancelled`, or `uncertain`. Leave unlaunched stages untouched.
+Use `snapshot()` for interim inspection. After reconciliation and report assembly,
+call `capture()` once and retain its returned snapshot for the exact final report.
+Render its UTC wall timestamps in the user's timezone and its monotonic intervals
+in seconds. Null measurements mean unavailable. A lost REPL/clock must be reported
+as unavailable; never instantiate a replacement to reconstruct an ongoing run.
+Include this utility's size and modification time in setup invalidation checks;
+reload changed modules with a versioned import URL before creating the next clock.
+
+Capture each invocation immediately before dispatch
 and after result acceptance, including overhead, cache lookup, and artifact checks.
 Group readiness and component-internal/historical timestamps are not dispatch times.
 Keep measurements in memory; do not reread production logs solely for timing.

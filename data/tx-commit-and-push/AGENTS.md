@@ -9,9 +9,42 @@ dependency changes, direct worker invocation, Git commands, or API/UI bypass.
 
 ## Public contract
 
-Input is exactly `{page_id, files, message}`. The component owns configuration,
+For commit-and-push, input is exactly `{page_id, files, message}`. The component owns configuration,
 approval, state refresh, execution and result acceptance; callers supply no internal
 Git fields. Do not discover files or expand directories.
+
+### Read-only local page query
+
+Accept exactly `{"action":"query-page","page_id":"<64 lowercase hexadecimal characters>"}`.
+Run from the parent repository root:
+
+```sh
+data/.venv/bin/python -B data/runner.py --input '{"action":"query-page","page_id":"<page_id>"}'
+```
+
+This operation needs no commit/push approval and rejects `--rerun` and
+`--implicit-approval`. It reads the branch and remote binding from git-config.json,
+validates the repository, pins the existing local branch commit, and inventories
+committed regular blobs under articles/, bookmark/, and index/ using the exact
+page_id directory. It does not fetch, contact GitHub, inspect working content,
+create a branch, or write logs, receipts, refs, or index files. It runs in the
+existing isolated data worker with filesystem writes and network denied.
+
+Return the six-field envelope with the original query as input, output_format=json,
+and meta_data={committed:false,pushed:false,push_attempted:false}. Success output
+is an inline object containing page_id, branch, commit_sha, found, and groups.
+Groups articles, bookmark, and index each contain status, files (data-relative),
+and artifacts. Each artifact has directory, files, and status. Status is absent
+when no recognized artifact exists, complete when every observed directory has
+its main Markdown and meta.md pair, otherwise partial. Completeness describes
+observed pairs only; it cannot prove all intended entities were indexed.
+Symlinks, submodules, and unexpected filenames/layouts are excluded.
+No matches is a successful found=false result; a missing configured branch is
+branch_not_found. Other repository/Git/runner failures remain errors, never absence.
+Results describe only the returned local SHA and do not certify remote state.
+Queries are not cached or subject to successful-execution duplicate blocking.
+
+The receipt/output-path and approval rules below apply to write operations only.
 
 - `page_id`: 64 lowercase hexadecimal characters.
 - `files`: unique, nonempty data-relative paths shaped `<folders>/<page_id>/<file>`.
@@ -61,7 +94,9 @@ When enabled and matching, proceed without a runtime approval prompt only for:
 
 - `commit-and-push` on an existing configured target, without `--rerun`;
 - unique nonempty paths exactly
-  `index/<entity>/<domain>/<page_id>/{utterances,meta}.md`;
+  `index/<entity>/<domain>/<page_id>/{utterances,meta}.md`,
+  `bookmark/<domain>/<page_id>/{bookmark,meta}.md`, or
+  `articles/<domain>/<page_id>/{article,meta}.md`;
 - message exactly `data: index webpage <page_id>`;
 - `create_branch=false`, `base_commit=null`, and a refreshed full target SHA.
 

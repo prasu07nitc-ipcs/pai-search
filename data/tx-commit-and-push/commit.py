@@ -24,6 +24,58 @@ class Failure(Exception):
         super().__init__(message)
 
 
+def query_page(value, settings):
+    """Inventory regular blobs at one pinned local branch commit, never local files."""
+    result = {'input': value, 'output': None, 'output_format': 'json',
+              'status': 'error', 'error': None,
+              'meta_data': {'committed': False, 'pushed': False, 'push_attempted': False}}
+    try:
+        root = Path(__file__).resolve().parents[2]
+        env = _environment(None, None)
+        origin = _repository(root, env, [])
+        _check_origin(root, env, settings['remote_url'], origin or '')
+        head = settings['expected_head']
+        if head is None:
+            raise Failure('branch_not_found', 'The configured local branch does not exist.')
+        _check_target(root, env, settings['branch'], head)
+        groups = {name: {'status': 'absent', 'files': [], 'artifacts': []}
+                  for name in ('articles', 'bookmark', 'index')}
+        expected = {'articles': {'article.md', 'meta.md'},
+                    'bookmark': {'bookmark.md', 'meta.md'},
+                    'index': {'utterances.md', 'meta.md'}}
+        artifacts = {}
+        records = _git(root, env, 'ls-tree', '-r', '-z', head, '--', 'data/articles/', 'data/bookmark/', 'data/index/')
+        for record in filter(None, records.split('\x00')):
+            header, path = record.split('\t', 1)
+            mode, kind, oid = header.split(' ')
+            parts = path.split('/')
+            if value['page_id'] not in parts[2:-1]:
+                continue
+            group = parts[1]
+            length = 6 if group == 'index' else 5
+            if (len(parts) != length or parts[-2] != value['page_id']
+                    or parts[-1] not in expected[group] or mode not in ('100644', '100755')
+                    or kind != 'blob'):
+                continue
+            relative = '/'.join(parts[1:])
+            groups[group]['files'].append(relative)
+            folder = '/'.join(parts[1:-1])
+            artifacts.setdefault((group, folder), []).append(relative)
+        for (group, folder), files in artifacts.items():
+            groups[group]['artifacts'].append({
+                'directory': folder, 'files': files,
+                'status': 'complete' if {f.rsplit('/', 1)[-1] for f in files} == expected[group] else 'partial'})
+        for group in groups.values():
+            if group['artifacts']:
+                group['status'] = 'complete' if all(a['status'] == 'complete' for a in group['artifacts']) else 'partial'
+        result.update(status='ok', output={
+            'page_id': value['page_id'], 'branch': settings['branch'], 'commit_sha': head,
+            'found': any(group['files'] for group in groups.values()), 'groups': groups})
+    except Failure as exc:
+        result['error'] = {'code': exc.code, 'message': str(exc)}
+    return result
+
+
 def _environment(author_name, author_email):
     # Do not inherit Git overrides, proxy commands, credentials, agents, or Python paths.
     env = {'PATH': '/usr/bin:/bin', 'HOME': '/var/empty', 'LC_ALL': 'C',

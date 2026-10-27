@@ -93,13 +93,22 @@ def require_implicit_approval(value, rerun=False):
         raise ValueError('Implicit approval requires unique, nonempty webpage-index output paths.')
     for path in files:
         parts = path.split('/')
-        if (len(parts) != 5 or parts[0] != 'index' or parts[3] != value['page_id']
-                or parts[4] not in ('utterances.md', 'meta.md') or '\\' in path
+        allowed_output = (
+            len(parts) == 5 and parts[0] == 'index'
+            and parts[3] == value['page_id']
+            and parts[4] in ('utterances.md', 'meta.md')
+        ) or (
+            len(parts) == 4 and parts[0] in ('bookmark', 'articles')
+            and parts[2] == value['page_id']
+            and parts[3] in (('bookmark.md', 'meta.md') if parts[0] == 'bookmark'
+                             else ('article.md', 'meta.md'))
+        )
+        if (not allowed_output or '\\' in path
                 or any(not part or part.startswith('.')
                        or part.lower() in ('logs', 'receipts', 'credentials', '__pycache__')
                        or any(ord(c) < 32 or ord(c) == 127 for c in part)
                        for part in parts)):
-            raise ValueError('Implicit approval permits only index/<entity>/<domain>/<page_id>/{utterances,meta}.md.')
+            raise ValueError('Implicit approval permits only index/<entity>/<domain>/<page_id>/{utterances,meta}.md, bookmark/<domain>/<page_id>/{bookmark,meta}.md, or articles/<domain>/<page_id>/{article,meta}.md.')
 
 
 def input_id(value):
@@ -219,7 +228,7 @@ def commit_sandbox_rules(value):
         raise ValueError('Installed Git binary unavailable.')
     os.environ['PROJECT_DATA_GIT_BINARY'] = str(binary)
     binaries = {binary}
-    if value['action'] != 'commit':
+    if value['action'] in ('push', 'commit-and-push'):
         wrapper = ROOT / 'tx-commit-and-push/logs/ssh-transport'
         if os.environ.get('PROJECT_DATA_SSH_WRAPPER') != str(wrapper) or not wrapper.is_file():
             raise SSHSetupError('The parent must prepare the fixed SSH transport before push.')
@@ -242,7 +251,7 @@ def commit_sandbox_rules(value):
         rules.append('(allow file-read* (literal ' + json.dumps(str(path)) + '))')
     for name in ('.gitignore', '.gitattributes'):
         rules.append('(allow file-read* (literal ' + json.dumps(str(ROOT.parent / name)) + '))')
-    for path in (ROOT.parent / '.git', ROOT / 'tx-commit-and-push/receipts'):
+    for path in (() if value['action'] == 'query-page' else (ROOT.parent / '.git', ROOT / 'tx-commit-and-push/receipts')):
         rules += ['(allow file-write* (subpath ' + json.dumps(str(path)) + '))',
                   '(deny file-write-unlink (literal ' + json.dumps(str(path)) + '))']
     # These files must remain unchanged even if component code regresses.
@@ -259,7 +268,7 @@ def commit_sandbox_rules(value):
     for binary in sorted(binaries):
         rules += ['(allow file-read* (literal ' + json.dumps(str(binary)) + '))',
                   '(allow process-exec (literal ' + json.dumps(str(binary)) + '))']
-    if value['action'] != 'commit':
+    if value['action'] in ('push', 'commit-and-push'):
         known = Path(os.environ['PROJECT_DATA_SSH_KNOWN_HOSTS'])
         agent = Path(os.environ['PROJECT_DATA_SSH_AGENT_SOCKET'])
         if not known.is_file() or not agent.is_socket():
@@ -359,6 +368,19 @@ def run_worker_process(command, **options):
 
 def worker(value, run_id):
     verify_environment()
+    if isinstance(value, dict) and value.get('action') == 'query-page':
+        validate_query_input(value)
+        if run_id != input_id(value):
+            raise ValueError('Invalid query ID.')
+        settings = inspect_settings()
+        install_sandbox(value)
+        spec = importlib.util.spec_from_file_location('data_query', ROOT / 'tx-commit-and-push/commit.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.query_page(value, settings)
+        validate_query_output(result, value)
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(',', ':')))
+        return
     value = validate_input(value)
     expected = input_id(value)
     if run_id != expected:
@@ -517,6 +539,87 @@ def inspect_settings():
     return {**settings, 'expected_head': head, 'base_commit': None}
 
 
+def validate_query_input(value):
+    if (not isinstance(value, dict) or set(value) != {'action', 'page_id'}
+            or value['action'] != 'query-page' or not isinstance(value['page_id'], str)
+            or re.fullmatch(r'[0-9a-f]{64}', value['page_id']) is None):
+        raise ValueError('query-page requires exactly action and a 64-character lowercase hexadecimal page_id.')
+
+
+def validate_query_output(result, value):
+    if (not isinstance(result, dict)
+            or set(result) != {'input', 'output', 'output_format', 'status', 'error', 'meta_data'}
+            or result['input'] != value or result['output_format'] != 'json'
+            or result['meta_data'] != {'committed': False, 'pushed': False, 'push_attempted': False}):
+        raise ValueError('Invalid query result envelope.')
+    if result['status'] == 'ok':
+        payload = result['output']
+        if (result['error'] is not None or not isinstance(payload, dict)
+                or set(payload) != {'page_id', 'branch', 'commit_sha', 'found', 'groups'}
+                or payload['page_id'] != value['page_id'] or payload['branch'] not in BRANCHES
+                or re.fullmatch(r'[0-9a-f]{40}', payload['commit_sha'] or '') is None
+                or type(payload['found']) is not bool
+                or set(payload['groups']) != {'articles', 'bookmark', 'index'}):
+            raise ValueError('Invalid query payload.')
+        for name, group in payload['groups'].items():
+            if (not isinstance(group, dict) or set(group) != {'status', 'files', 'artifacts'}
+                    or group['status'] not in ('absent', 'partial', 'complete')
+                    or not isinstance(group['files'], list) or not isinstance(group['artifacts'], list)):
+                raise ValueError('Invalid query group.')
+            collected = []
+            for artifact in group['artifacts']:
+                if (not isinstance(artifact, dict) or set(artifact) != {'directory', 'files', 'status'}
+                        or artifact['status'] not in ('partial', 'complete')
+                        or not isinstance(artifact['directory'], str)
+                        or not isinstance(artifact['files'], list) or not artifact['files']):
+                    raise ValueError('Invalid query artifact.')
+                for path in artifact['files']:
+                    if not isinstance(path, str):
+                        raise ValueError('Invalid query path.')
+                    parts = path.split('/')
+                    expected = {'articles': {'article.md', 'meta.md'}, 'bookmark': {'bookmark.md', 'meta.md'},
+                                'index': {'utterances.md', 'meta.md'}}[name]
+                    if (len(parts) != (5 if name == 'index' else 4) or parts[0] != name
+                            or parts[-2] != value['page_id'] or parts[-1] not in expected
+                            or '/'.join(parts[:-1]) != artifact['directory']):
+                        raise ValueError('Query path escaped page artifact scope.')
+                actual = 'complete' if {p.rsplit('/', 1)[-1] for p in artifact['files']} == expected else 'partial'
+                if artifact['status'] != actual:
+                    raise ValueError('Invalid artifact completeness.')
+                collected.extend(artifact['files'])
+            actual = ('absent' if not collected else 'complete'
+                      if all(a['status'] == 'complete' for a in group['artifacts']) else 'partial')
+            if sorted(collected) != sorted(group['files']) or len(set(collected)) != len(collected) or group['status'] != actual:
+                raise ValueError('Inconsistent query inventory.')
+        if payload['found'] != any(g['files'] for g in payload['groups'].values()):
+            raise ValueError('Inconsistent query presence.')
+    elif (result['status'] != 'error' or result['output'] is not None
+          or not isinstance(result['error'], dict) or set(result['error']) != {'code', 'message'}
+          or any(not isinstance(v, str) or not v for v in result['error'].values())):
+        raise ValueError('Invalid query failure.')
+    json.dumps(result, allow_nan=False)
+
+
+def query_page(value, timeout=20):
+    """Read only committed local artifacts; never create logs, receipts or refs."""
+    verify_environment()
+    validate_query_input(value)
+    if not math.isfinite(timeout) or not 0 < timeout <= 300:
+        raise ValueError('Timeout must be >0 and <=300 seconds.')
+    try:
+        completed = run_worker_process([str(ENV / 'bin/python'), '-I', '-B', str(Path(__file__).resolve()), '--worker'],
+            input=json.dumps({'input': value, 'run_id': input_id(value)}), text=True,
+            capture_output=True, check=True, timeout=timeout, env=dict(os.environ))
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        return {'input': value, 'output': None, 'output_format': 'json', 'status': 'error',
+                'error': {'code': 'query_timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'query_worker_failed',
+                          'message': 'Local query failed; no absence result is available. Inspect the runtime/repository before retrying.'},
+                'meta_data': {'committed': False, 'pushed': False, 'push_attempted': False}}
+    result = strict_json(completed.stdout)
+    validate_query_output(result, value)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input')
@@ -542,7 +645,12 @@ def main():
             result = inspect_settings()
         elif args.input is not None:
             original = strict_json(args.input)
-            result = invoke(original, args.timeout, args.rerun, args.implicit_approval)
+            if isinstance(original, dict) and original.get('action') == 'query-page':
+                if args.rerun or args.implicit_approval:
+                    raise ValueError('Read-only queries do not accept approval or rerun flags.')
+                result = query_page(original, args.timeout)
+            else:
+                result = invoke(original, args.timeout, args.rerun, args.implicit_approval)
         else:
             raise ValueError('Supply --input JSON or --inspect-settings.')
     except (OSError, ValueError, RuntimeError) as exc:
