@@ -36,8 +36,9 @@ proof of no effects. Failure does not roll back.
 
 ## Configuration and approval
 
-`git-config.json` is the only settings source. Exactly five keys are required:
-`author_name`, `author_email`, `branch`, `remote_url`, `create_branch`.
+`git-config.json` is the only settings source. Exactly six keys are required:
+`author_name`, `author_email`, `branch`, `remote_url`, `create_branch`,
+`webpage_index_approval`.
 No environment, local/global/system Git config, CLI branch selection, chat defaults
 or inline overrides may supply these settings. Edit the file to change them.
 Author fields may be null during setup, but commits require nonblank values without
@@ -46,13 +47,44 @@ remote must be `git@github.com:<owner>/<repo>.git`; creation policy is boolean.
 The runner rejects missing/malformed files, aliases, extra keys and conflicting inputs.
 Repository origin is read only to validate the configured remote.
 
+### Persistent approval
+
+`webpage_index_approval` is an explicit persistent grant configured by the user.
+It contains exactly `enabled` (boolean), `repository` (canonical absolute parent
+repository path), and `branch`, `remote_url`, `author_name`, `author_email` (nonblank
+strings). The four settings bind the grant to those exact configured values.
+The grant applies across chats while enabled and matching; configuration alone
+without this enabled grant does not authorize Git effects. Do not enable, rebind,
+or broaden the grant without a user request authorizing that change.
+
+When enabled and matching, proceed without a runtime approval prompt only for:
+
+- `commit-and-push` on an existing configured target, without `--rerun`;
+- unique nonempty paths exactly
+  `index/<entity>/<domain>/<page_id>/{utterances,meta}.md`;
+- message exactly `data: index webpage <page_id>`;
+- `create_branch=false`, `base_commit=null`, and a refreshed full target SHA.
+
+Dispatch these runs with `--implicit-approval`. The runner reloads the grant and
+checks its repository/settings binding, action, message and literal path scope
+before execution effects. Existing source/path/receipt validations still apply.
+Do not omit the flag to bypass a rejected grant. Set `enabled=false` to revoke it.
+A changed repository or bound setting invalidates implicit approval until the user
+explicitly authorizes rebinding. Branch creation, recovery actions, reruns and
+other paths/messages require separate explicit approval under the process below.
+Implementation/setup requests still do not authorize committing or pushing now.
+
+### Runtime approval and state refresh
+
 Inspect settings and live local branch state:
 
 ```sh
 data/.venv/bin/python -B data/runner.py --inspect-settings
 ```
 
-Inspection does not fetch or certify remote state. Present repository, configured
+Inspection includes the persistent grant and does not fetch or certify remote state.
+If the persistent grant matches the request, skip the approval prompt, refresh state
+immediately before dispatch and use `--implicit-approval`. Otherwise present repository, configured
 remote/branch/author/creation policy and current target SHA in one approval request.
 Ask directly through an available native form or grouped chat prompt. No default
 selection or silence grants permission. Existing target: use its refreshed SHA,
@@ -63,8 +95,9 @@ Offer approval for this invocation, or subsequent webpage-index commit-and-push 
 in this chat. Session approval covers only the canonical repository, configured
 settings, webpage-index files beneath each supplied page ID and message
 `data: index webpage <page_id>`. Other messages/actions need separate approval.
-Store authorization only in chat memory. Revocation, changed settings/scope, a new
-chat or lost approval context requires fresh approval. One-run approval is consumed
+Store runtime authorization only in chat memory; the persistent config grant is
+separate. Revocation, changed settings/scope, a new chat or lost approval context
+requires fresh runtime approval unless the persistent grant covers the request. One-run approval is consumed
 on dispatch, including failure. Branch disappearance or a changed creation base
 requires fresh creation approval.
 
@@ -86,10 +119,11 @@ Build exactly these internal fields; public input values remain unchanged:
 | base_commit | null for existing target; approved full SHA for creation |
 
 ```sh
-data/.venv/bin/python -B data/runner.py --input '<complete JSON>'
+data/.venv/bin/python -B data/runner.py --input '<complete JSON>' --implicit-approval
 ```
 
-Use POSIX single-quote escaping, including embedded apostrophes. Default worker
+The example uses persistent approval; omit `--implicit-approval` only for a separately
+approved runtime invocation. Use POSIX single-quote escaping, including embedded apostrophes. Default worker
 timeout is 20 seconds; approval interaction is outside it. The runner also accepts
 `--timeout` (>0, <=300 finite seconds) and `--rerun` only after explicit approval
 and reconciliation of an identical successful input. No automatic retries.

@@ -51,9 +51,9 @@ def load_git_config():
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise ValueError('git-config.json must be a regular unaliased file.')
         value = strict_json(stream.read())
-    fields = {'author_name', 'author_email', 'branch', 'remote_url', 'create_branch'}
+    fields = {'author_name', 'author_email', 'branch', 'remote_url', 'create_branch', 'webpage_index_approval'}
     if not isinstance(value, dict) or set(value) != fields:
-        raise ValueError('git-config.json must contain exactly author_name, author_email, branch, remote_url, create_branch.')
+        raise ValueError('git-config.json must contain exactly author_name, author_email, branch, remote_url, create_branch, webpage_index_approval.')
     if not isinstance(value['branch'], str) or value['branch'] not in BRANCHES or type(value['create_branch']) is not bool:
         raise ValueError('Invalid branch or create_branch in git-config.json.')
     for key in ('author_name', 'author_email'):
@@ -63,7 +63,43 @@ def load_git_config():
     remote = value['remote_url']
     if not isinstance(remote, str) or re.fullmatch(r'git@github\.com:[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+\.git', remote) is None or remote.rsplit('/', 1)[-1] in ('.git', '..git'):
         raise ValueError('Set an explicit GitHub SSH remote_url in git-config.json.')
+    approval = value['webpage_index_approval']
+    approval_fields = {'enabled', 'repository', 'branch', 'remote_url', 'author_name', 'author_email'}
+    if (not isinstance(approval, dict) or set(approval) != approval_fields
+            or type(approval['enabled']) is not bool
+            or any(not isinstance(approval[key], str) or not approval[key].strip()
+                   or any(ord(c) < 32 or ord(c) == 127 for c in approval[key])
+                   for key in approval_fields - {'enabled'})):
+        raise ValueError('Invalid webpage_index_approval in git-config.json.')
     return value
+
+
+def require_implicit_approval(value, rerun=False):
+    """Enforce the persistent grant before any execution side effects."""
+    settings = load_git_config()
+    approval = settings['webpage_index_approval']
+    if (not approval['enabled'] or approval['repository'] != str(ROOT.parent)
+            or any(approval[key] != settings[key] or value[key] != settings[key]
+                   for key in ('branch', 'remote_url', 'author_name', 'author_email'))):
+        raise ValueError('Implicit approval is disabled or its repository/settings binding changed; obtain explicit approval or update the grant.')
+    if (rerun or value['action'] != 'commit-and-push' or value['create_branch']
+            or value['base_commit'] is not None
+            or not isinstance(value['expected_head'], str)
+            or re.fullmatch(r'[0-9a-f]{40}', value['expected_head']) is None
+            or value['message'] != 'data: index webpage ' + value['page_id']):
+        raise ValueError('Implicit approval covers only first-run webpage-index commit-and-push on an existing branch; obtain explicit approval for this action.')
+    files = value['files']
+    if not files or len(set(files)) != len(files):
+        raise ValueError('Implicit approval requires unique, nonempty webpage-index output paths.')
+    for path in files:
+        parts = path.split('/')
+        if (len(parts) != 5 or parts[0] != 'index' or parts[3] != value['page_id']
+                or parts[4] not in ('utterances.md', 'meta.md') or '\\' in path
+                or any(not part or part.startswith('.')
+                       or part.lower() in ('logs', 'receipts', 'credentials', '__pycache__')
+                       or any(ord(c) < 32 or ord(c) == 127 for c in part)
+                       for part in parts)):
+            raise ValueError('Implicit approval permits only index/<entity>/<domain>/<page_id>/{utterances,meta}.md.')
 
 
 def input_id(value):
@@ -352,9 +388,11 @@ def append_record(path, record):
         os.close(fd)
 
 
-def invoke(value, timeout=20, rerun=False):
+def invoke(value, timeout=20, rerun=False, implicit_approval=False):
     verify_environment()
     value = validate_input(value)
+    if implicit_approval:
+        require_implicit_approval(value, rerun)
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError('Timeout must be >0 and <=300 seconds.')
     if ROOT.name != 'data' or (ROOT / '.git').exists():
@@ -485,10 +523,12 @@ def main():
     parser.add_argument('--inspect-settings', action='store_true')
     parser.add_argument('--timeout', type=float, default=20)
     parser.add_argument('--rerun', action='store_true')
+    parser.add_argument('--implicit-approval', action='store_true',
+                        help='Require the persistent webpage-index grant in git-config.json.')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker:
-        if args.inspect_settings or args.input is not None or args.rerun:
+        if args.inspect_settings or args.input is not None or args.rerun or args.implicit_approval:
             parser.error('Worker mode cannot be combined with other operations.')
         payload = strict_json(sys.stdin.read())
         worker(payload['input'], payload['run_id'])
@@ -496,13 +536,13 @@ def main():
     original = None
     try:
         if args.inspect_settings:
-            if args.input is not None or args.rerun:
+            if args.input is not None or args.rerun or args.implicit_approval:
                 raise ValueError('Settings inspection cannot be combined with execution.')
             verify_environment()
             result = inspect_settings()
         elif args.input is not None:
             original = strict_json(args.input)
-            result = invoke(original, args.timeout, args.rerun)
+            result = invoke(original, args.timeout, args.rerun, args.implicit_approval)
         else:
             raise ValueError('Supply --input JSON or --inspect-settings.')
     except (OSError, ValueError, RuntimeError) as exc:
