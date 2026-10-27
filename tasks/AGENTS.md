@@ -57,12 +57,41 @@ inputs through siblings. Return routing status, artifact references, and require
 execution-entry information; avoid full payload echoes unless the component response
 contract requires them. Do not create extra input copies.
 
+Launch component agents without inherited conversation history (`fork_turns: "none"`
+when supported). Supply the repository root, exact named-input invocation, selected
+component instruction paths, applicable shared policies, authorized scope, and any
+explicit reference date/timezone the component needs. Do not pass unrelated task
+history, upstream payloads already available through named file inputs, or another
+component's instructions. Let each component perform its own cache lookup and
+validation. Keep the configured model and reasoning settings unless explicitly
+authorized to change them. A completed agent may be reused only for the same
+component, with fresh explicit input state and setup invalidation checks; do not
+reuse an agent across different component roles.
+
 ## Dispatch and accept
 
 For each ready stage, capture its own dispatch time and launch through its declared
 method. Use direct existing runner commands with safely serialized arguments and
 explicit working directories. Do not invent wrappers or skill CLIs. Dispatch parallel
 members without waiting for an earlier member to finish; collect results independently.
+
+Keep the critical path event-driven. After dispatch, collect completion immediately
+when available; otherwise use the platform's completion/event wait, bounded to at
+most 60 seconds so progress can still be communicated. Never insert a sleep before
+or between completion waits, alternate sleeps with short polls, or send status
+requests that only ask an active component to finish. Do independent required work
+while a component runs; do not add work merely to fill the wait. A wait timeout is
+not a component failure or permission to repeat execution.
+
+On completion, accept the returned status and required artifacts, settle that stage,
+then dispatch the next ready stage without an intervening wait or unrelated read.
+Batch compatible artifact checks and state updates in one tool call where possible.
+Prepare launch commentary before marking dispatch; place the dispatch mark directly
+before launch. Announce an accepted outcome together with the next launch when useful.
+Do not read a path-only producer's full payload in the orchestrator when its consumer
+owns parsing and semantic validation; check the required file properties instead.
+Read the final reader-facing body once when assembling the report. Retain component
+execution entries from the returned results rather than rereading logs for them.
 
 Acceptance requires successful process/agent completion, successful component status,
 and all contract-required artifact/integrity checks. Exit zero alone is insufficient.

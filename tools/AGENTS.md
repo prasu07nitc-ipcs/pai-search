@@ -110,6 +110,11 @@ than repeat the shared logging specification.
 - Reject symlinks within `output/` and output paths containing traversal outside it. File access must not escape through symlinks, other filesystem aliases, or directory replacement. Enforce the write boundary through OS sandboxing or permissions, not path-string checks alone.
 - Workers must not write elsewhere, including their tool root outside `output/`, other tools' directories, runtime or system locations, temporary directories, environment files, or runner-owned logs. Tool definitions and instructions remain protected from worker writes. Subprocess restrictions remain in force.
 - Workers may read their own tool directory and the read-only interpreter, installed dependencies, runner infrastructure, and system resources required for execution. Other tools' directories and unrelated user files are outside the permitted read scope. Runtime read access does not grant write access.
+- Exception: `tool-index-search` may also read only the repository trees
+  `skills/skill-query-interpreter/output/`, `data/bookmark/`, and `data/index/`. The runner grants
+  these read-only roots exclusively to that tool, rejecting aliased roots.
+  Requirement paths must remain within the former tree; bookmark scans within
+  the bookmark tree; utterance collection within the index tree. No additional write access is granted.
 - Tool instructions must document output-file behavior, returned paths, and applicable side effects. File permissions do not authorize environment management.
 
 ## Environment management

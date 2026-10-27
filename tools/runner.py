@@ -250,6 +250,12 @@ def worker(tool_name, value, run_id=None):
                 Path('/System'), Path('/usr/lib'), Path('/usr/share'),
                 Path('/private/etc'), Path('/private/var/run'), Path('/dev'),
                 Path('/Library/Apple'), Path('/Library/Preferences/SystemConfiguration')]
+    if tool_name == "tool-index-search":
+        for relative in ("skills/skill-query-interpreter/output", "data/bookmark", "data/index"):
+            source = ROOT.parent / relative
+            if source.resolve() != source or not source.is_dir():
+                raise ValueError("Bookmark search read roots must be real, unaliased directories.")
+            readable.append(source)
     rules = ['(version 1)', '(allow default)', '(deny file-read*)', '(allow file-read-metadata)',
              '(deny file-write*)', '(deny process-fork)', '(deny process-exec)',
              '(deny file-link)']

@@ -6,6 +6,7 @@ runner owns validation, deadlines, and logs; each tool owns its domain contract.
 ## Start here
 
 - [Project policy and shared contracts](AGENTS.md)
+- [Index search](tool-index-search/TOOL.md): requirement path → matching pages, ranked entities, and utterances across the index
 - [URL validation](tool-url-validate/TOOL.md): offline text → URL and SHA-256 ID
 - [Webpage metadata](tool-webpage-metadata/TOOL.md): URL + ID → JSON metadata
 - [Markdown extraction](tool-webpage-markdown/TOOL.md): URL + ID → article Markdown
