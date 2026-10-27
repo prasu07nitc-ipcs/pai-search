@@ -37,7 +37,7 @@ PYTHON = ENV / "bin/python"
 LOGGER = logging.getLogger(__name__)
 SOURCE_FILE_FIELDS = {
     "tx-save-article": ("meta_data_file_path", "article_file_path"),
-    "tx-bookmark": ("meta_data_file_path",),
+    "tx-bookmark": ("meta_data_file_path", "context_file_path"),
     "tx-index": ("context_file_path", "meta_data_file_path"),
 }
 
@@ -460,6 +460,8 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
         rules.append('(allow file-read* (subpath ' + json.dumps(str(path)) + '))')
     # Grant only the selected source files, never their producer directories.
     for field in SOURCE_FILE_FIELDS.get(transaction_name, ()):
+        if transaction_name == "tx-bookmark" and field == "context_file_path" and value[field] is None:
+            continue
         source = Path(value[field])
         if not source.is_absolute():
             source = PROJECT / source

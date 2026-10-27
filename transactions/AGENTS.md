@@ -45,7 +45,7 @@ IDNA hostname, retain www, strip trailing DNS dot/port, replace dots with unders
 
 | Transaction | Consumed files | Owned output below data/ |
 | --- | --- | --- |
-| tx-bookmark | metadata | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
+| tx-bookmark | metadata, optional contexts | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
 | tx-index | metadata, contexts | index/<exact entity_name>/<domain>/<page_id>/{utterances,meta}.md |
 | tx-save-article | metadata, article | articles/<domain>/<page_id>/{article,meta}.md |
 

@@ -5,7 +5,7 @@ For execution, read [shared policy](AGENTS.md) and the selected contract only:
 
 | Contract | Consumed files | Output below data/ |
 | --- | --- | --- |
-| [tx-bookmark](tx-bookmark/AGENTS.md) | metadata JSON | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
+| [tx-bookmark](tx-bookmark/AGENTS.md) | metadata + optional context JSON | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
 | [tx-index](tx-index/AGENTS.md) | metadata + context JSON | index/<entity>/<domain>/<page_id>/{utterances,meta}.md |
 | [tx-save-article](tx-save-article/AGENTS.md) | metadata JSON + article Markdown | articles/<domain>/<page_id>/{article,meta}.md |
 

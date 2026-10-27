@@ -1,4 +1,4 @@
-"""Store supplied webpage metadata as an agent-readable local bookmark."""
+"""Store webpage metadata and optional entity names as a local bookmark."""
 from __future__ import annotations
 
 import hashlib
@@ -39,7 +39,29 @@ def _text(value: str) -> str:
     return re.sub(r"([\\`*_{}\[\]<>#+|])", r"\\\1", " ".join(value.split()))
 
 
-def _render(page: dict, domain: str) -> str:
+def _entities(path: str | None) -> list[str]:
+    if path is None:
+        return []
+    if not isinstance(path, str) or not path.strip():
+        raise _Failure("invalid_input", "context_file_path must be a nonempty path string or null.")
+    source = _source_file(path)
+    try:
+        contexts = json.loads(_read_input(source))
+        json.dumps(contexts, allow_nan=False)
+    except (ValueError, OverflowError) as exc:
+        raise _Failure("invalid_context", "context_file_path must contain finite JSON.") from exc
+    if not isinstance(contexts, list):
+        raise _Failure("invalid_context", "Context input must be an array of objects with nonempty entity_name strings.")
+    names = {}
+    for item in contexts:
+        if (not isinstance(item, dict) or not isinstance(item.get("entity_name"), str)
+                or not item["entity_name"].strip()):
+            raise _Failure("invalid_context", "Context entries must have nonempty entity_name strings.")
+        names.setdefault(item["entity_name"].strip(), None)
+    return list(names)
+
+
+def _render(page: dict, domain: str, entities: list[str]) -> str:
     lines = ["# " + _text(page["title"]), "", "## Description", "", _text(page["description"]), "", "## Source", ""]
     for label, value in [("URL", page["url"]), ("Domain", domain)] + [(label, page.get(key)) for label, key in [("Site name", "site_name"), ("Type", "type"), ("Section", "section")]]:
         if value:
@@ -50,6 +72,8 @@ def _render(page: dict, domain: str) -> str:
     dates = [(label, page.get(key)) for label, key in [("Published", "datePublished"), ("Modified", "dateModified")]]
     if any(value for _, value in dates):
         lines += ["", "## Dates", ""] + [f"- {label}: {_text(value)}" for label, value in dates if value]
+    if entities:
+        lines += ["", "## Entities", ""] + ["- " + _text(name) for name in entities]
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -181,7 +205,7 @@ def bookmark(page_id: str, meta_data_file_path: str, context_file_path: str | No
         domain = _domain(page["url"])
         if hashlib.sha256(page["url"].encode("utf-8")).hexdigest() != page_id:
             raise _Failure("page_id_mismatch", "page_id does not match the exact URL hash.")
-        content = _render(page, domain)
+        content = _render(page, domain, _entities(context_file_path))
         metadata = "## Identifier\n\n- Page ID: " + page_id + "\n\n" + os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"]
         result["output"] = _write_output(domain, page_id,
             {"bookmark.md": content, "meta.md": metadata}, written)
