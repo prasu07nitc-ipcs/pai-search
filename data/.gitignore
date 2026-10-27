@@ -6,3 +6,4 @@ tx-commit-and-push/receipts/
 .env.*
 *.pem
 *.key
+/tx-commit-and-push/git-config.json
