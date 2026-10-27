@@ -1,0 +1,6 @@
+# K.C. Venugopal
+
+## Sequence: **2/11**
+- Utterance: I am an MP and All India Congress Committee (AICC) general secretary. I termed former Chief Secretary Jiji Thomson’s disclosure that present Chief Election Commissioner Gyanesh Kumar had urged him in 2016 to join the Bharatiya Janata Party, while Kumar was still an IAS officer in the Keralam cadre, “extremely serious.” I said Thomson’s revelation exposes Kumar as an operative who had taken upon himself the task of installing Narendra Modi and Amit Shah in power. I alleged that Kumar’s appointment as CEC rewarded his doing the BJP’s bidding while in service, and said the BJP also favoured him by passing Parliamentary legislation barring civil or criminal proceedings against the CEC or other Election Commissioners for official actions or words. I demanded Kumar’s immediate removal, accusing him of heading a racket that seizes power by hollowing out democracy, and of reciprocating BJP favours by undermining elections in the country. I said dissent against Kumar was already surfacing within the NDA and urged the Modi government to remove him immediately and protect the Election Commission’s integrity.
+- Indexed At: 2026-10-27T11:00:22.065123+05:30
+- Last Validated At: 2026-10-27T11:00:22.065123+05:30
