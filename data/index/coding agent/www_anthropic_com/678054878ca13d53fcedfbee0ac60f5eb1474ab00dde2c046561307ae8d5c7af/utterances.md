@@ -1,0 +1,6 @@
+# coding agent
+
+## Sequence: **5/15**
+- Utterance: Every session after initialization is asked to make incremental progress and leave structured updates. After scaffolding, the coding agent is asked to work on one feature at a time to address excessive simultaneous work. Coding agents are prompted to change only the passes field in the feature file, with strong instructions that removing or editing tests is unacceptable because functionality could be missed or buggy. They are asked to commit progress with descriptive git messages and summarize it in a progress file, leaving the environment clean. At the beginning of each session they are prompted to run pwd to identify their editable directory, read git logs and progress files, and choose the highest-priority unfinished feature. The development-server script and basic end-to-end test help them get oriented without figuring out testing anew. In the claude.ai clone example each session started the server, used Puppeteer MCP to start a chat, send a message, and receive a response, so existing breakage could be identified and fixed before new work; starting a new feature first would likely worsen existing problems.
+- Indexed At: 2026-10-29T10:17:31.418203+05:30
+- Last Validated At: 2026-10-29T10:17:31.418203+05:30

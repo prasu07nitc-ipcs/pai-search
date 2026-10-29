@@ -1,0 +1,6 @@
+# Claude
+
+## Sequence: **8/15**
+- Utterance: Claude exhibited two failure patterns: it tried to do too much at once and effectively one-shot the app, often exhausting context mid-implementation and leaving half-finished undocumented features; later sessions then guessed what happened and spent substantial time restoring basic functionality. Compaction did not always convey clear instructions to the next agent. Later in projects, another agent instance could see existing progress and prematurely declare completion. Claude also tended to mark features complete without adequate testing: absent explicit prompting, code changes, unit tests, and curl calls to a development server could miss end-to-end failure. With explicit instructions to use browser automation and test as a human user would, Claude mostly verified web-app features well. Testing tools dramatically improved performance by exposing otherwise unobvious bugs. Limitations in Claude’s vision and browser tools still make some bugs difficult to identify; Claude cannot see browser-native alert modals through Puppeteer MCP, and features depending on these modals tended to be buggier.
+- Indexed At: 2026-10-29T10:17:31.418203+05:30
+- Last Validated At: 2026-10-29T10:17:31.418203+05:30

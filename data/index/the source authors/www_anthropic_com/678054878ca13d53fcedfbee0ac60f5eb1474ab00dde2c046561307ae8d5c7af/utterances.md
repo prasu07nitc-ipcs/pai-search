@@ -1,0 +1,6 @@
+# the source authors
+
+## Sequence: **2/15**
+- Utterance: We developed a two-part solution enabling the Claude Agent SDK to work effectively across many context windows: an initializer agent prepares the first environment, and a coding agent makes incremental progress in later sessions while leaving clear artifacts for the next session. Code examples are provided in an accompanying quickstart. Our internal experiments used an init.sh script, a claude-progress.txt log, and initial git commit to establish context, followed by incremental work and structured updates. Quickly understanding work from a fresh context window through the progress file and git history was the key insight, inspired by everyday practices of effective software engineers. We found JSON feature lists less likely than Markdown lists to be inappropriately changed or overwritten by the model. We found requests for descriptive git commits and progress summaries best elicited clean handoffs; these allowed reverting bad changes and recovering working code, while reducing time spent guessing about prior work and restoring the basic app. Providing browser testing tools dramatically improved performance by enabling identification and repair of bugs not apparent from code alone.
+- Indexed At: 2026-10-29T10:17:31.418203+05:30
+- Last Validated At: 2026-10-29T10:17:31.418203+05:30
