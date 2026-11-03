@@ -1,0 +1,6 @@
+# D. Logesh Tamilselvan
+
+## Sequence: **4/6**
+- Utterance: Minister for Commercial Taxes and Registration D. Logesh Tamilselvan said on Tuesday, November 3, 2026, that assessing Tamil Nadu’s economic performance solely on gross GST collection figures was incorrect, responding to Opposition criticism that GST revenue growth had fallen below the national average under the TVK government. In a post on X, he said it was important to understand the calculation of GST figures: gross GST collection includes SGST, the Union government’s CGST and IGST, but the entire IGST collected cannot be treated as Tamil Nadu’s revenue because it includes amounts attributable to other States. He said the State’s actual GST revenue comprises SGST collections and the IGST settlement apportioned to it. He argued that GST rate rationalisation in September 2025 reduced rates on several commodities, so a decline in gross GST collections alone could not assess the State’s economic performance. He said Tamil Nadu’s actual GST revenue registered 15% growth up to October in the current financial year and 8% growth in October alone.
+- Indexed At: 2026-11-03T18:23:46.664176+05:30
+- Last Validated At: 2026-11-03T18:23:46.664176+05:30
