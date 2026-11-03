@@ -38,7 +38,7 @@ The identity field is defined in the shared result contract above. For webpage
 tools, `page_id` is the lowercase SHA-256 of the exact UTF-8 URL; tools independently
 validate it before fetching. Historical records using `raw_input` remain readable.
 
-Each production execution appends one record to the selected tool's `logs/run.log`
+Each actual production execution appends one record to the selected tool's `logs/run.log`
 with exactly `run_id`, `executed_at`, `processed_input`, the identity field,
 `tool_input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
 `processed_input` preserves supplied arguments before defaults, excluding identity.
@@ -48,11 +48,23 @@ identity; other result fields copy directly. On runner failure, `tool_input`,
 `output`, `output_format`, and `meta_data` are null; status and error describe the
 failure. Never record a rejected result as success.
 
-Every invocation executes the tool, including repeated identical inputs. Do not
-read previous result records to block or reuse an execution. Successful executions
-atomically replace the saved payload for the same page ID; failures preserve
-previous payloads where possible. Retain each execution as a separate log record.
-Concurrent executions are not reserved.
+Before runner dispatch, callers (agents, tasks and services) reuse successful
+results from the tool's logs/run.log unless the user explicitly requests a rerun.
+Match all default-expanded arguments, including identity, ignoring JSON key order
+but preserving strings and value types. Only the latest successful record for an
+output path is eligible, since later executions may replace that file.
+
+Require status=ok, error=null, a valid result envelope and a readable regular,
+unaliased artifact satisfying its format and payload contract. Return the original
+envelope, identify cache reuse, and create no worker, output write or log entry.
+No match: execute normally. Invalid history or matching artifacts: report a
+cache/storage error without silently rerunning. Source/corpus or implementation
+changes do not invalidate cache; request an explicit rerun for fresh results.
+
+Rerun is caller intent, not a tool argument or unsupported runner flag. Actual
+executions retain separate log records and atomically replace same-ID outputs;
+failures preserve prior outputs where possible. Concurrent runs are not reserved.
+This caller policy does not imply caching is implemented in the runner or REST API.
 
 The parent also appends diagnostics to tool-local `logs/runner.log`: timestamps,
 levels, function names, start/completion/failure, exception tracebacks, and elapsed

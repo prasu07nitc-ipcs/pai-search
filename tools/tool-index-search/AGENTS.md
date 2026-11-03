@@ -121,8 +121,7 @@ with explanatory text. Metadata includes `scanned_files`, `matched_files`,
 (unique files read) and `utterance_count` (output row count).
 
 Save UTF-8 Markdown atomically with a trailing newline, replacing only this ID's
-Markdown. Historical JSON outputs/logs remain unchanged; every tool invocation
-executes under shared policy. Errors use `output: null`, `output_format: markdown`
+Markdown. Historical JSON outputs/logs remain unchanged. Errors use `output: null`, `output_format: markdown`
 and code `invalid_input`, `invalid_requirement`, `corpus_error`,
 `missing_dependency` or `output_write_error`. Preserve previous payloads where
 possible; unexpected programming errors propagate.
