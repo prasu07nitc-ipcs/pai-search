@@ -1,0 +1,6 @@
+# K. Arumugathammal
+
+## Sequence: **1/17**
+- Utterance: K. Arumugathammal, 50, of Madurai, mother of K. Meenakshisundaram and K. Tirupathi, petitioned the Madras High Court alleging prison warders beat all 17 inmates who escaped Theni district jail on October 26, 2026 after their recapture within 42 hours. She claimed local police arrested her sons on October 9 on false charges of robbing ₹500 and possessing 300 grams of ganja and lodged them in Theni district prison. Her sons told her there were worms in their food and warders took articles visitors gave inmates; she said Meenakshisundaram was assaulted for complaining. She attributed the escape by her sons and 15 others to alleged ill-treatment. Without justifying the jailbreak, her affidavit filed through counsel P. Pugalendhi sought an impartial inquiry by an independent authority into alleged ill-treatment and physical assault. She claimed her sons realised their mistake and surrendered on October 28, all 17 recaptured prisoners were beaten with lathis and boots at Theni district jail on October 29, and her sons and two others were transferred to Salem Central Prison without proper treatment for injuries from the alleged severe thrashing.
+- Indexed At: 2026-11-03T18:10:22.343997+05:30
+- Last Validated At: 2026-11-03T18:10:22.343997+05:30
