@@ -19,14 +19,9 @@ Inspect JSON status even after exit 0. Sandbox enforcement, atomic per-file writ
 rerun confirmation, partial-failure recovery and log contracts are defined once in
 the shared policy. Environment/dependency changes require separate authorization.
 
-## Verification
-
-Tests isolate writes in temporary directories:
-
-```sh
-transactions/.venv/bin/python -B -m unittest discover -s transactions -p 'test_*.py' -q
-```
-
-On macOS, add `TRANSACTION_SANDBOX_TEST=1` to that command to test real sandboxed
-runners in a disposable project, outside any enclosing sandbox. This does not execute
-production inputs or modify persisted data.
+The transaction environment contains only Python built-ins and the standard library;
+external packages, including pip and setuptools, are forbidden. There is no requirements
+file. Runtime writes are confined to the project’s `transactions/` sub-project
+folder and project-root `data/` folder. Logs remain in each transaction’s own
+`logs/` directory. The Python environment stays read-only during execution, and
+component contracts still determine permitted outputs and side effects.

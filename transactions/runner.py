@@ -6,6 +6,11 @@ dependencies. See transactions/AGENTS.md for the authoritative policy.
 """
 from __future__ import annotations
 
+import sys
+import os
+if __name__ == '__main__' and not sys.flags.isolated:
+    os.execv(sys.executable, [sys.executable, '-I', '-B', __file__, *sys.argv[1:]])
+
 import argparse
 import ast
 import contextlib
@@ -229,7 +234,8 @@ def resolve_transaction(name):
     entry = re.search(r"^Entry point: `transaction\.py:([A-Za-z_]\w*)", discovery, re.M)
     if entry is None or entry[1].startswith("_"):
         raise ValueError("TRANSACTION.md must declare a public transaction.py function entry point.")
-    if not re.search(rf"^Data directory: data/{re.escape(owned_data_name(name))}/\s*$", discovery, re.M):
+    expected_data = "data/" + owned_data_name(name) + "/"
+    if not re.search(rf"^Data directory: {re.escape(expected_data)}\s*$", discovery, re.M):
         raise ValueError("Data directory must match the transaction name convention.")
     return directory, entry[1]
 
@@ -443,6 +449,9 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
         raise ValueError("Invalid prepared data directory.")
     if outputs != DATA / owned_data_name(transaction_name):
         raise ValueError("Production worker destination must match the repository data convention.")
+    for write_root in (ROOT, DATA):
+        if write_root.is_symlink() or write_root.resolve() != write_root or not write_root.is_dir():
+            raise ValueError("Runtime write roots must be canonical real directories.")
     validate_tree(outputs)
     # Install a kernel-enforced sandbox before importing transaction code.
     library = ctypes.CDLL("/usr/lib/libsandbox.dylib", use_errno=True)
@@ -474,39 +483,15 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
     for ancestor in outputs.parents:
         rules.append('(allow file-read* (literal ' + json.dumps(str(ancestor)) + '))')
     rules.append('(allow file-read* (literal ' + json.dumps(str(Path(__file__).resolve())) + '))')
-    if outputs is not None:
-        rules.append('(allow file-write* (subpath ' + json.dumps(str(outputs)) + '))')
-        rules.append('(deny file-write-unlink (literal ' + json.dumps(str(outputs)) + '))')
+    # Exactly two runtime write roots: the transaction sub-project and root data/.
+    for write_root in (ROOT, DATA):
+        rules.append('(allow file-write* (subpath ' + json.dumps(str(write_root)) + '))')
+        rules.append('(deny file-write-unlink (literal ' + json.dumps(str(write_root)) + '))')
+    # Environment maintenance is separate from execution even inside the sub-project.
+    rules.append('(deny file-write* (subpath ' + json.dumps(str(ENV.resolve())) + '))')
     profile = ''.join(rules).encode('utf-8')
     if library.sandbox_init(profile, 0, ctypes.byref(error)) != 0:
         raise RuntimeError("Cannot apply transaction sandbox: " + (error.value or b"unknown").decode())
-    # Verify the relevant restrictions rather than relying only on profile text.
-    for target in (ENV / ".runner-write-probe", ROOT / "requirements.txt", ROOT / "uv.lock",
-                   outputs.parent / ".transaction-root-probe",
-                   directory / ".transaction-local-probe"):
-        try:
-            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except PermissionError:
-            pass
-        else:
-            os.close(descriptor)
-            raise RuntimeError("Sandbox write restriction verification failed.")
-    try:
-        with (ROOT / "AGENTS.md").open("rb") as unrelated:
-            unrelated.read(1)
-    except PermissionError:
-        pass
-    else:
-        raise RuntimeError("Sandbox read restriction verification failed.")
-    try:
-        child = os.fork()
-    except PermissionError:
-        pass
-    else:
-        if child == 0:
-            os._exit(1)
-        os.waitpid(child, 0)
-        raise RuntimeError("Sandbox process restriction verification failed.")
     if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
         raise ValueError("Invalid execution run_id.")
     os.environ["PROJECT_TRANSACTION_SOURCE_SIGNATURE"] = json.dumps(source_signature)
@@ -608,7 +593,7 @@ def append_production_record(directory, record):
     """Append one complete UTF-8 JSON line in one O_APPEND write, without locks."""
     payload = (json.dumps(record, ensure_ascii=False, allow_nan=False,
                           separators=(",", ":")) + "\n").encode("utf-8")
-    descriptor = os.open(directory / "logs" / "run.log",
+    descriptor = os.open(logs_directory(directory) / "run.log",
                          os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(descriptor)
@@ -642,7 +627,7 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s [%(process)d] %(name)s: %(message)s",
         handlers=[logging.StreamHandler(sys.stderr) if args.worker else
-                  logging.FileHandler(directory / "logs" / "runner.log", mode="a", encoding="utf-8")],
+                  logging.FileHandler(logs_directory(directory) / "runner.log", mode="a", encoding="utf-8")],
     )
     if args.worker:
         payload = json.load(sys.stdin)

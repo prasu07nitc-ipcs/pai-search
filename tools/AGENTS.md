@@ -48,7 +48,7 @@ identity; other result fields copy directly. On runner failure, `tool_input`,
 `output`, `output_format`, and `meta_data` are null; status and error describe the
 failure. Never record a rejected result as success.
 
-Before runner dispatch, callers (agents, tasks and services) reuse successful
+Before runner dispatch, callers (agents and apps) reuse successful
 results from the tool's logs/run.log unless the user explicitly requests a rerun.
 Match all default-expanded arguments, including identity, ignoring JSON key order
 but preserving strings and value types. Only the latest successful record for an

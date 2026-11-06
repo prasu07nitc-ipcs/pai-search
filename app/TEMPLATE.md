@@ -1,12 +1,12 @@
-# Task recipe template
+# App recipe template
 
 Authoring only. Replace placeholders and follow [project policy](AGENTS.md).
 Do not restate shared scheduling, failure, cache, or timing rules.
 
 ```markdown
-# task-<name>
+# app-<name>
 
-One sentence describing the outcome. Follow the task library policy (link ../AGENTS.md).
+One sentence describing the outcome. Follow the app library policy (link ../AGENTS.md).
 
 ## Input
 
@@ -23,7 +23,7 @@ Define producer references and path bases. Use one row per invocation.
 
 | ID | Component / instructions | Execution / timeout | Named inputs |
 | --- | --- | --- | --- |
-| <id> | <exact component with instruction link> | <runner template + timeout, or agent> | <exact arguments from task input or producer values/paths> |
+| <id> | <exact component with instruction link> | <runner template + timeout, or agent> | <exact arguments from app input or producer values/paths> |
 
 ## Groups
 
@@ -34,5 +34,5 @@ Define producer references and path bases. Use one row per invocation.
 ## Result
 
 Component-provided identity; main deliverables and relevant supporting links.
-List only task-specific exceptions to shared rules, if any.
+List only app-specific exceptions to shared rules, if any.
 ```

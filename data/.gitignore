@@ -1,9 +1,6 @@
 .venv/
 **/__pycache__/
-tx-commit-and-push/logs/
-tx-commit-and-push/receipts/
 .env
 .env.*
 *.pem
 *.key
-/tx-commit-and-push/git-config.json

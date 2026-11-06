@@ -20,14 +20,50 @@ stop and explain. CLI stdin support (`--input -`) does not override this policy.
 Python 3.11+ on macOS and the existing transactions/.venv are required. Environment
 creation, installation and dependency changes require separate explicit authorization.
 Never invoke modules or internal worker mode directly. The parent prepares storage;
-the worker installs and verifies OS isolation before importing transaction code.
+the worker applies OS isolation before importing transaction code.
 Fail closed if the runtime or sandbox is unavailable.
 
-STRICT: runner.py is self-contained, using only built-ins and the standard library.
-No third-party, optional, conditional, dynamic, vendored or indirect dependencies,
-external Python helpers, or install/repair fallbacks. Loading the selected transaction
-and the OS sandbox through standard-library ctypes is permitted. Review every runner
-change for compliance; stop on conflicts unless the user changes this policy.
+Sandbox restriction validation belongs to development and maintenance review when
+changing transaction files or the runner. Check the permitted read/write roots,
+process/network permissions and isolation profile against the selected contract.
+Use only disposable validation fixtures if behavioral verification is needed.
+Production executions must not perform restriction probes: no attempted forbidden
+file reads/writes, process launches, or forks solely to verify isolation. Applying
+the OS sandbox and checking whether installation succeeded remain required; normal
+input, output, path, authorization and repository-state checks remain in force.
+
+## Strict native-Python environment
+
+`transactions/.venv` must contain only Python built-ins and the standard library.
+No external Python packages may be installed, retained, imported or vendored,
+including pip, setuptools, optional/development packages and transitive dependencies.
+There is no requirements file or external-package allowlist. Create or recreate the
+runtime with `--without-pip`; disable system-site-packages. Environment maintenance
+requires explicit user authorization and must never occur during transaction runs.
+Validate the package-free environment during development/environment maintenance;
+do not add per-execution restriction probes or automatic package repair.
+
+The self-contained runner and transaction code must use only built-ins and the
+standard library, without external helpers or dependency fallbacks. Loading the
+selected transaction and applying macOS sandboxing through standard-library ctypes
+remain permitted.
+
+## Strict runtime write boundary
+
+Runtime filesystem writes are allowed only within these two canonical roots:
+
+- The respective sub-project folder: project-root `transactions/`.
+- The root project's data folder: project-root `data/`.
+
+The OS sandbox applies these two write roots and denies writes elsewhere, including
+Git metadata, unrelated project folders and external paths. The Python environment
+inside `transactions/.venv` stays read-only during execution; its maintenance requires
+separate explicit authorization. Logs remain at `transactions/tx-<name>/logs/`.
+These filesystem permissions do not authorize changing source, configuration or
+other transactions' content during a run. Component contracts still determine the
+selected transaction's output ownership and permitted side effects. Parent-owned
+logs retain their append-only record contract. Use `-B` to prevent bytecode writes.
+Read-only source-signature capture remains permitted through this runner only.
 
 ## Input and ownership
 
@@ -50,9 +86,11 @@ IDNA hostname, retain www, strip trailing DNS dot/port, replace dots with unders
 | tx-save-article | metadata, article | articles/<domain>/<page_id>/{article,meta}.md |
 
 Workers may read runtime/implementation files and only their literal consumed sources;
-no producer-directory or unused-input grants, network or subprocess access. Writes
-are confined to the selected subtree; never sibling data, logs, implementation or
-runtime. Ownership limits framework workers, not arbitrary host processes. Reject
+no producer-directory or unused-input grants, network or subprocess access.
+The two-root write boundary above applies at OS level. Component contracts constrain
+outputs to their assigned data subtree; parent-owned log writes remain under the
+transaction directory. Filesystem permission is not authorization for unrelated edits.
+Ownership limits framework workers, not arbitrary host processes. Reject
 aliases escaping ownership; pin destinations with no-follow descriptors. Create owned
 directories only during authorized execution. Tools retain their output permissions.
 
@@ -91,9 +129,9 @@ exit nonzero with stderr diagnostics. --timeout is finite, >0, at most 300 secon
 
 ## Records and source signature
 
-Parent-owned transaction-local logs/run.log is append-only UTF-8 JSON Lines: serialize
+Parent-owned transaction-local `logs/run.log` is append-only UTF-8 JSON Lines: serialize
 once, one O_APPEND write, fsync. Short writes fail and can leave incomplete tails;
-never auto-repair history. logs/runner.log records diagnostics, failures and invocation
+never auto-repair history. `logs/runner.log` records diagnostics, failures and invocation
 timing. Storage failure/termination can prevent logging. Paths do not archive old bytes.
 
 New records have exactly run_id, executed_at, transaction_input, output,

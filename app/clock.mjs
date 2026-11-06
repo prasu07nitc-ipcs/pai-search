@@ -1,5 +1,5 @@
 // In-memory timing only. This module never executes components or writes files.
-export function createTaskClock(stageIds, now = () => ({
+export function createAppClock(stageIds, now = () => ({
   wall: new Date().toISOString(), mono: performance.now(),
 })) {
   if (!Array.isArray(stageIds) || !stageIds.length ||

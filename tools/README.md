@@ -44,20 +44,6 @@ Each tool's `logs/run.log` contains append-only JSON Lines; `logs/runner.log`
 contains diagnostics and timings. See the [logging contract](AGENTS.md#production-logging).
 Repeated invocations replace the saved output on success without confirmation.
 
-## Verification
-
-Run the offline infrastructure regressions without fetching pages or importing
-tool implementations:
-
-```sh
-tools/.venv/bin/python -B tools/test_runner.py
-```
-
-Behavioral checks of tool implementations must use the runner. Real webpage
-fetches depend on publisher availability and content; they are smoke checks,
-not reproducible fixtures. Identical input hashes reproduce identity, not a
-snapshot of a mutable website or dependency environment.
-
 The sandbox denies worker process creation and writes outside its declared
 output directory. It permits network access; public-address restrictions belong
 to the webpage tools. This is a macOS-specific boundary, not a portable execution
