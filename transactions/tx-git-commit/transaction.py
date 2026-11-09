@@ -4,11 +4,13 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
 SCOPE = ("data/articles", "data/index", "data/queries")
 CONFIG = Path(__file__).with_name("git-config.json")
+PROJECT = CONFIG.resolve().parents[2]
 PREFIXES = tuple(os.fsencode(directory + "/") for directory in SCOPE)
 OPERATION_MARKERS = (
     "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge",
@@ -61,6 +63,32 @@ def check_history(head, bases):
             "--name-only", "--no-renames", "-z", input_bytes=commits,
         )
         check_paths(paths.split(b"\0"))
+
+
+def committed_page_ids(parent, commit):
+    paths = git(
+        "diff-tree", "-r", "--no-commit-id", "--name-only", "--no-renames",
+        "--diff-filter=AM", "-z", parent, commit, "--", *SCOPE[:2],
+    )
+    return sorted({
+        os.fsdecode(match[1])
+        for path in paths.split(b"\0")
+        if (match := re.fullmatch(
+            rb"data/(?:articles/[^/]+|index/[^/]+/[^/]+)/([0-9a-f]{64})\.md", path
+        ))
+    })
+
+
+def clean_tool_outputs(page_ids):
+    completed = subprocess.run(
+        ["tools/.venv/bin/python", "-B", "tools/runner.py", "--tool", "tool-webpage-gc",
+         "--input", json.dumps({"page_ids": page_ids}, separators=(",", ":"))],
+        cwd=PROJECT, capture_output=True, encoding="utf-8", timeout=60,
+    )
+    if completed.returncode:
+        raise ValueError("Webpage cleanup runner exited with status "
+                         f"{completed.returncode}. See tools/tool-webpage-gc/logs/runner.log.")
+    return json.loads(completed.stdout)
 
 
 def run(result):
@@ -159,6 +187,7 @@ def run(result):
         if line("rev-list", "--parents", "-n", "1", commit).split() != [commit, head]:
             raise ValueError("The new commit does not have the expected parent.")
         check_history(commit, [head])
+        result["page_ids"] = committed_page_ids(head, commit)
         head = commit
 
     if head != tip:
@@ -170,11 +199,18 @@ def run(result):
             f"{head}:{branch_ref}",
         )
         result["pushed"] = True
+    if result["page_ids"]:
+        try:
+            result["cleanup"] = clean_tool_outputs(result["page_ids"])
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+            raise ValueError(f"Commit was pushed, but webpage cleanup failed: {error}") from error
+        if result["cleanup"]["status"] != "ok":
+            raise ValueError("Commit was pushed, but webpage cleanup reported an error.")
     result.update(status="ok", branch=branch, remote=remote)
 
 
 def execute(value):
-    result = {"status": "error", "commit": None, "pushed": False}
+    result = {"status": "error", "commit": None, "pushed": False, "page_ids": [], "cleanup": None}
     try:
         if not isinstance(value, dict) or value.keys() - {"message"} or not isinstance(value.get("message", ""), str):
             raise ValueError('Supply an empty object or an object with only a string "message".')

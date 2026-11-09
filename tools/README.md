@@ -11,6 +11,8 @@ runner owns validation, deadlines, and logs; each tool owns its domain contract.
 - [Markdown extraction](tool-webpage-markdown/TOOL.md): URL + ID → article Markdown
 - [Article assembly](tool-webpage-article/TOOL.md): matching metadata and Markdown → article
 
+- [Webpage output cleanup](tool-webpage-gc/TOOL.md) deletes outputs for a list of page IDs across other tools.
+
 Read the selected tool's instructions before invoking it. Commands start in the
 repository root containing `tools/`. Use the existing `tools/.venv` environment;
 Python 3.11+ and macOS are required. Missing dependencies require separately
@@ -53,7 +55,7 @@ not reproducible fixtures. Identical input hashes reproduce identity, not a
 snapshot of a mutable website or dependency environment.
 
 The sandbox denies worker process creation and writes outside its declared
-output directory. It permits network access; public-address restrictions belong
+output directory, with exact peer-file unlink permissions for authorized webpage cleanup. It permits network access; public-address restrictions belong
 to the webpage tools. This is a macOS-specific boundary, not a portable execution
 service or a tamper-proof audit system. See [policy](AGENTS.md) for exact limits.
 

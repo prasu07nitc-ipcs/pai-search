@@ -231,6 +231,23 @@ def output_directory(directory):
     return target
 
 
+def cleanup_targets(page_id):
+    """Enumerate exact peer output paths eligible for webpage cleanup."""
+    if not isinstance(page_id, str) or re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
+        return
+    for directory in sorted(ROOT.glob("tool-*")):
+        if directory.name == "tool-webpage-gc":
+            continue
+        try:
+            resolve_tool(directory.name)
+        except ValueError:
+            continue
+        output = directory / "output"
+        if not output.is_symlink() and output.is_dir():
+            for extension in ("json", "md"):
+                yield output / f"{page_id}.{extension}"
+
+
 @log_execution
 def worker(tool_name, value, run_id=None):
     verify_environment()
@@ -259,6 +276,10 @@ def worker(tool_name, value, run_id=None):
     if outputs is not None:
         rules.append('(allow file-write* (subpath ' + json.dumps(str(outputs)) + '))')
         rules.append('(deny file-write-unlink (literal ' + json.dumps(str(outputs)) + '))')
+    if tool_name == "tool-webpage-gc":
+        for page_id in dict.fromkeys(value["page_ids"]):
+            for target in cleanup_targets(page_id):
+                rules.append('(allow file-write-unlink (literal ' + json.dumps(str(target)) + '))')
     profile = ''.join(rules).encode('utf-8')
     if library.sandbox_init(profile, 0, ctypes.byref(error)) != 0:
         raise RuntimeError("Cannot apply tool sandbox: " + (error.value or b"unknown").decode())
@@ -311,20 +332,28 @@ def invoke(tool_name, value, *, timeout=20):
     validate_input(directory, entry, value)
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
+    record_input = value
+    if tool_name == "tool-webpage-gc":
+        page_ids = value["page_ids"]
+        if (not isinstance(page_ids, list) or not page_ids
+                or any(not isinstance(page_id, str) or re.fullmatch(r"[0-9a-f]{64}", page_id) is None
+                       for page_id in page_ids)):
+            raise ValueError("page_ids must be a nonempty list of lowercase SHA-256 page IDs.")
+        record_input = {**value, "page_id": page_ids[0]}
     logs_directory(directory)
-    run_id = value.get("page_id")
+    run_id = record_input.get("page_id")
     if run_id is not None and (not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None):
         run_id = None
     outputs = output_directory(directory)
     if outputs is not None:
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
-    identity = next(key for key in ("input_text", "raw_input", "page_id") if key in value)
+    identity = next(key for key in ("input_text", "raw_input", "page_id") if key in record_input)
     record = {
         "run_id": run_id,
         "executed_at": datetime.now(timezone.utc).isoformat(),
-        "processed_input": {key: argument for key, argument in value.items() if key != identity},
-        identity: value[identity], "tool_input": None,
+        "processed_input": {key: argument for key, argument in record_input.items() if key != identity},
+        identity: record_input[identity], "tool_input": None,
         "output": None, "output_format": None,
         "status": "error", "error": None, "meta_data": None,
     }
@@ -339,7 +368,7 @@ def invoke(tool_name, value, *, timeout=20):
         worker_stderr = completed.stderr
         result = json.loads(completed.stdout)
         validate_output(result, tool_name, run_id)
-        if set(result["input"]) != {identity, "processed_input"} or result["input"][identity] != value[identity]:
+        if set(result["input"]) != {identity, "processed_input"} or result["input"][identity] != record_input[identity]:
             raise ValueError("Tool must preserve the supplied input identity.")
         record.update(
             run_id=run_id or (result["meta_data"].get("page_id") if result["status"] == "ok" else None),

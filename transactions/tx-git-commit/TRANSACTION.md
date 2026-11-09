@@ -13,3 +13,7 @@ accepts only `--transaction` and `--input`.
 The runner prints a JSON result and exits nonzero on error. A successful
 no-op has a null commit and pushed=false. A push retry can succeed with a
 null commit and pushed=true when an earlier run created the commit.
+The result includes `page_ids` from added or modified article and index files
+in the newly created commit. After a successful push, the same nonempty list
+is sent to the webpage cleanup tool. Its result appears in `cleanup`, which is
+null when cleanup did not return a result.

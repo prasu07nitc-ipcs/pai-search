@@ -25,6 +25,13 @@ Use git-config.json for the commit identity. Do not switch branches or run
 concurrent Git operations in the same checkout during execution. An error
 after staging can leave eligible changes staged. If a commit was created,
 the result reports its ID. Re-run the transaction to retry a push.
+Report unique page IDs from added or modified article and index files in the
+new commit. Query filenames identify queries. After pushing the new commit,
+run [tool-webpage-gc](../../tools/tool-webpage-gc/TOOL.md) through its shared
+runner and environment with the same list. Each newly pushed commit requests
+fresh cleanup. Skip cleanup for empty lists and push-only retries. If cleanup
+fails, preserve the commit ID, push status, and page IDs in the result so the
+same list can be supplied directly to the cleanup tool after a successful push.
 Use the checkout machine's local date in dd-mm-yy format as the entire
 commit message. Discard any supplied message text.
 Git commands time out individually after 60 seconds. After a timeout, check
