@@ -13,7 +13,10 @@ repository or remote fail validation.
 Stop before contacting the remote if Git reports any staged, unstaged, or
 untracked path outside the three allowed directories. Recheck before staging.
 Git-ignored untracked files are excluded from this check.
-Force-add ignored files only within the three allowed directories.
+Require an explicit nonempty list of unique repository-relative file paths.
+Reject directories, symlinked paths, traversal, and missing untracked files.
+Treat paths literally. Stage and commit only the selected paths, including
+selected ignored files and tracked deletions. Preserve other staged changes.
 Use a full checkout with an existing local commit so the runner can validate
 outgoing history.
 An existing remote branch must be an ancestor of local HEAD. For a new remote
@@ -26,13 +29,8 @@ concurrent Git operations in the same checkout during execution. An error
 after staging can leave eligible changes staged. If a commit was created,
 the result reports its ID. Re-run the transaction to retry a push.
 Report unique page IDs from added or modified article and index files in the
-new commit. Query filenames identify queries. After pushing the new commit,
-run [tool-webpage-gc](../../tools/tool-webpage-gc/TOOL.md) through its shared
-runner and environment with the same list. Each newly pushed commit requests
-fresh cleanup. Skip cleanup for empty lists and push-only retries. If cleanup
-fails, preserve the commit ID, push status, and page IDs in the result so the
-same list can be supplied directly to the cleanup tool after a successful push.
+new commit. Query filenames identify queries.
 Use the checkout machine's local date in dd-mm-yy format as the entire
-commit message. Discard any supplied message text.
+commit message.
 Git commands time out individually after 60 seconds. After a timeout, check
 the checkout and remote before retrying because the operation may have completed.

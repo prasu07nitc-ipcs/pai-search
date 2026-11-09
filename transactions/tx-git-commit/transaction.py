@@ -79,19 +79,37 @@ def committed_page_ids(parent, commit):
     })
 
 
-def clean_tool_outputs(page_ids):
-    completed = subprocess.run(
-        ["tools/.venv/bin/python", "-B", "tools/runner.py", "--tool", "tool-webpage-gc",
-         "--input", json.dumps({"page_ids": page_ids}, separators=(",", ":"))],
-        cwd=PROJECT, capture_output=True, encoding="utf-8", timeout=60,
-    )
-    if completed.returncode:
-        raise ValueError("Webpage cleanup runner exited with status "
-                         f"{completed.returncode}. See tools/tool-webpage-gc/logs/runner.log.")
-    return json.loads(completed.stdout)
+def input_paths(value):
+    if not isinstance(value, dict) or value.keys() != {"file_paths"}:
+        raise ValueError('Supply an object with only "file_paths".')
+    paths = value["file_paths"]
+    if not isinstance(paths, list) or not paths:
+        raise ValueError("file_paths must be a nonempty list.")
+    for path in paths:
+        if (
+            not isinstance(path, str) or "\0" in path
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+        ):
+            raise ValueError(f"Expected a repository-relative file path: {path!r}")
+        check_paths([os.fsencode(path)])
+    if len(paths) != len(set(paths)):
+        raise ValueError("file_paths must not contain duplicates.")
+    return paths
 
 
-def run(result):
+def check_selected_files(paths):
+    for name in paths:
+        path = Path(name)
+        if any(part.is_symlink() for part in (path, *path.parents)):
+            raise ValueError(f"Symlinked file path: {name!r}")
+        if path.is_file():
+            continue
+        tracked = git("--literal-pathspecs", "ls-files", "-z", "--", name).split(b"\0")
+        if path.exists() or os.fsencode(name) not in tracked:
+            raise ValueError(f"Expected a file or a tracked deletion: {name!r}")
+
+
+def run(result, paths):
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     author, email = (config[key] for key in ("author", "email"))
     for value in (author, email):
@@ -111,6 +129,7 @@ def run(result):
     if any(Path(path).exists() for path in line("rev-parse", *marker_args).splitlines()):
         raise ValueError("Finish the in-progress Git operation first.")
     check_worktree()
+    check_selected_files(paths)
 
     remotes = line("remote").splitlines()
     if not remotes:
@@ -165,28 +184,25 @@ def run(result):
     if line("symbolic-ref", "HEAD") != branch_ref or line("rev-parse", "HEAD") != head:
         raise ValueError("The checkout changed during validation.")
     check_worktree()
-    # Filter absent directories so a sparse set of generated outputs is valid.
-    tracked = git("ls-files", "-z", "--", *SCOPE).split(b"\0")
-    paths = [
-        directory for directory in SCOPE if Path(directory).is_dir()
-        or any(path.startswith(os.fsencode(directory + "/")) for path in tracked)
-    ]
-    if paths:
-        git("add", "-f", "-A", "--", *paths)
-    staged = git("diff", "--cached", "--name-only", "--no-renames", "-z")
-    check_paths(staged.split(b"\0"))
+    check_selected_files(paths)
+    git("--literal-pathspecs", "add", "-f", "-A", "--", *paths)
+    staged = git("--literal-pathspecs", "diff", "--cached", "--name-only",
+                 "--no-renames", "-z", "--", *paths)
     if staged:
         message = datetime.now().strftime("%d-%m-%y")
         git(
-            "-c", f"user.name={author}", "-c", f"user.email={email}",
-            "-c", "commit.gpgSign=false", "commit", "--author",
-            f"{author} <{email}>", "-m", message,
+            "--literal-pathspecs", "-c", f"user.name={author}", "-c", f"user.email={email}",
+            "-c", "commit.gpgSign=false", "commit", "--only", "--author",
+            f"{author} <{email}>", "-m", message, "--", *paths,
         )
         commit = line("rev-parse", branch_ref)
         result["commit"] = commit
         if line("rev-list", "--parents", "-n", "1", commit).split() != [commit, head]:
             raise ValueError("The new commit does not have the expected parent.")
-        check_history(commit, [head])
+        changed = git("diff-tree", "-r", "--no-commit-id", "--name-only",
+                      "--no-renames", "-z", head, commit)
+        if set(changed.split(b"\0")) - {b"", *map(os.fsencode, paths)}:
+            raise ValueError("The new commit contains an unselected path.")
         result["page_ids"] = committed_page_ids(head, commit)
         head = commit
 
@@ -199,24 +215,16 @@ def run(result):
             f"{head}:{branch_ref}",
         )
         result["pushed"] = True
-    if result["page_ids"]:
-        try:
-            result["cleanup"] = clean_tool_outputs(result["page_ids"])
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
-            raise ValueError(f"Commit was pushed, but webpage cleanup failed: {error}") from error
-        if result["cleanup"]["status"] != "ok":
-            raise ValueError("Commit was pushed, but webpage cleanup reported an error.")
     result.update(status="ok", branch=branch, remote=remote)
 
 
 def execute(value):
-    result = {"status": "error", "commit": None, "pushed": False, "page_ids": [], "cleanup": None}
+    result = {"status": "error", "commit": None, "pushed": False, "page_ids": []}
     try:
-        if not isinstance(value, dict) or value.keys() - {"message"} or not isinstance(value.get("message", ""), str):
-            raise ValueError('Supply an empty object or an object with only a string "message".')
+        paths = input_paths(value)
         if shutil.which("git") is None:
             raise ValueError("Git is required.")
-        run(result)
+        run(result, paths)
     except subprocess.CalledProcessError as error:
         result["error"] = error.stderr[:1024].decode(errors="replace").strip() or (
             f"Git exited with status {error.returncode}."
