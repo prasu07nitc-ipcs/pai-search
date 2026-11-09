@@ -1,6 +1,6 @@
 ---
 name: skill-webpage-search
-description: Answer questions from the project's local webpage index with entity utterance citations and article references. Use when this project skill is explicitly selected for a corpus search, summary, or comparison.
+description: Answer questions directly with source article references. Use when this project skill is explicitly selected for a corpus search, summary, or comparison.
 ---
 
 # Webpage search

@@ -40,18 +40,19 @@ Path enumeration and automated search matches alone do not count as review.
 
 ## Result
 
-Return Markdown with length, detail, and structure adapted to the query.
-Verify factual claims against the article text. In each answer paragraph, cite
-the relevant entity utterances beside the claims they support. Use clickable
-Markdown links labeled with the entity heading and, when needed to distinguish
-utterances in the same file, the sequence number. Link to the exact absolute
-`data/index` file containing the utterance.
+Lead with the answer in plain language and adapt the length, detail, and
+format to the user's request. Verify factual claims against the articles and
+attribute reported claims to their sources. Keep the index, corpus, retrieval
+and ranking methods, file paths, review counts, cache, and execution details
+out of the answer and user-facing progress updates. Describe evidence gaps in
+terms of what the available reporting establishes. If no usable article
+supports the query, say that reliable coverage was unavailable and record a
+completed search. Describe an execution failure in plain language.
 
-End the answer with a `## References` section listing each article used in the
-answer once. Use the article's title as the link label and its exact absolute
-`data/articles` file path as the target. Explain material coverage gaps.
-If no usable article supports the query, report that as a completed search.
-Include the references section only when the answer uses at least one article.
+When using sources, end with a `## References` section listing each article
+once. Use the article title as the label and its public publisher URL from
+the article metadata as the target. If no valid public URL is available, use
+the title and publisher as plain text.
 
 For each new completed search or handled failure, save the Markdown output
 to `output/<run_id>.md` with `output_format: "markdown"` and these five
@@ -85,9 +86,11 @@ bullet with a hyperlink. Use its repository-relative path as the link label
 and its exact absolute file path as the target. If no index files were
 reviewed, state that in the section.
 
-For new runs and cache hits, show the answer in chat without an execution-entry
-table or the Index Files Analysed section. For structured saved results,
-display only the answer under Response. If an older saved answer embeds
-Index Files Analysed within the response, omit that section from chat while
-preserving the rest of the answer, including References. Identical inputs reuse
-the saved result without rewriting it.
+For new runs and cache hits, show only the answer in chat. For structured
+saved results, use the content under Response. Apply the current presentation
+rules to older saved answers too. Remove any embedded Index Files Analysed
+section, internal links, and retrieval or execution details. Convert local
+article references to public references using article metadata when available.
+Preserve the saved factual content and source attribution in the displayed
+answer. Identical inputs reuse the saved result without rewriting it or
+rerunning retrieval.
