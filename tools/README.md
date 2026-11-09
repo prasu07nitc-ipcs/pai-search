@@ -6,10 +6,10 @@ runner owns validation, deadlines, and logs; each tool owns its domain contract.
 ## Start here
 
 - [Project policy and shared contracts](AGENTS.md)
-- [Index search](tool-index-search/TOOL.md): requirement path → matching pages, ranked entities, and utterances across the index
-- [URL validation](tool-url-validate/TOOL.md): offline text → URL and SHA-256 ID
+- [URL validation](tool-webpage-validator/TOOL.md): offline text → URL and SHA-256 ID
 - [Webpage metadata](tool-webpage-metadata/TOOL.md): URL + ID → JSON metadata
 - [Markdown extraction](tool-webpage-markdown/TOOL.md): URL + ID → article Markdown
+- [Article assembly](tool-webpage-article/TOOL.md): matching metadata and Markdown → article
 
 Read the selected tool's instructions before invoking it. Commands start in the
 repository root containing `tools/`. Use the existing `tools/.venv` environment;
@@ -17,7 +17,7 @@ Python 3.11+ and macOS are required. Missing dependencies require separately
 authorized environment maintenance.
 
 ```sh
-tools/.venv/bin/python -B tools/runner.py --tool tool-url-validate \
+tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-validator \
   --input '{"input_text":"https://example.com/article"}'
 ```
 
@@ -46,13 +46,6 @@ contains diagnostics and timings. See the [logging contract](AGENTS.md#productio
 Repeated invocations replace the saved output on success without confirmation.
 
 ## Verification
-
-Run the offline infrastructure regressions without fetching pages or importing
-tool implementations:
-
-```sh
-tools/.venv/bin/python -B tools/test_runner.py
-```
 
 Behavioral checks of tool implementations must use the runner. Real webpage
 fetches depend on publisher availability and content; they are smoke checks,

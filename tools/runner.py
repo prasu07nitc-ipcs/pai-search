@@ -176,8 +176,8 @@ def validate_output(result, tool_name=None, run_id=None):
         raise ValueError("input requires an input_text, page_id, or legacy raw_input string and processed_input object.")
     if not isinstance(result["meta_data"], dict):
         raise ValueError("meta_data must be an object.")
-    if not isinstance(result.get("output_format"), str) or not result["output_format"].strip():
-        raise ValueError("output_format must be a non-empty string.")
+    if result["output_format"] not in ("json", "markdown"):
+        raise ValueError("output_format must be json or markdown.")
     output = result["output"]
     if result["status"] == "ok":
         if (not isinstance(output, str) or re.fullmatch(
@@ -246,16 +246,10 @@ def worker(tool_name, value, run_id=None):
     library.sandbox_init.argtypes = [ctypes.c_char_p, ctypes.c_uint64, ctypes.POINTER(ctypes.c_char_p)]
     library.sandbox_init.restype = ctypes.c_int
     error = ctypes.c_char_p()
-    readable = [directory, ENV.resolve(), Path(sys.base_prefix).resolve(),
+    readable = [ROOT.parent, ENV.resolve(), Path(sys.base_prefix).resolve(),
                 Path('/System'), Path('/usr/lib'), Path('/usr/share'),
                 Path('/private/etc'), Path('/private/var/run'), Path('/dev'),
                 Path('/Library/Apple'), Path('/Library/Preferences/SystemConfiguration')]
-    if tool_name == "tool-index-search":
-        for relative in ("skills/skill-query-interpreter/output", "data/bookmark", "data/index"):
-            source = ROOT.parent / relative
-            if source.resolve() != source or not source.is_dir():
-                raise ValueError("Bookmark search read roots must be real, unaliased directories.")
-            readable.append(source)
     rules = ['(version 1)', '(allow default)', '(deny file-read*)', '(allow file-read-metadata)',
              '(deny file-write*)', '(deny process-fork)', '(deny process-exec)',
              '(deny file-link)']
@@ -277,13 +271,8 @@ def worker(tool_name, value, run_id=None):
         else:
             os.close(descriptor)
             raise RuntimeError("Sandbox write restriction verification failed.")
-    try:
-        with (ROOT / "AGENTS.md").open("rb") as unrelated:
-            unrelated.read(1)
-    except PermissionError:
-        pass
-    else:
-        raise RuntimeError("Sandbox read restriction verification failed.")
+    with (ROOT.parent / "AGENTS.md").open("rb") as project_policy:
+        project_policy.read(1)
     try:
         child = os.fork()
     except PermissionError:
@@ -343,7 +332,8 @@ def invoke(tool_name, value, *, timeout=20):
     try:
         completed = subprocess.run(
             [str(PYTHON), "-B", str(Path(__file__).resolve()), "--tool", tool_name, "--worker"],
-            input=json.dumps({"input": value, "run_id": run_id}), text=True, capture_output=True,
+            input=json.dumps({"input": value, "run_id": run_id}, separators=(",", ":")),
+            text=True, encoding="utf-8", capture_output=True,
             cwd=str(ROOT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr

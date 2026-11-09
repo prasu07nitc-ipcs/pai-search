@@ -2,20 +2,13 @@
 
 | Recipe | Input | Saved outputs |
 | --- | --- | --- |
-| [task-webpage-index](task-webpage-index/TASK.md) | URL or text containing one | Researched article, bookmark, entity indexes, commit-and-push receipt |
-| [task-webpage-search](task-webpage-search/TASK.md) | Query and optional location, time range, and application context | Query interpretation, index-search report, cited answer from saved articles |
+| [task-webpage-index](task-webpage-index/TASK.md) | URL or text containing one | Saved article and per-entity Markdown indexes |
 
 Run `task-webpage-index: https://example.com/article`.
-Run `task-webpage-search: What changes are proposed in the transport policy?`
-Search runs interpretation, local index search, and article-grounded answering
-in sequence. Its recipe also accepts structured query/context input.
 Components own their input resolution, user interaction, and authorization.
 Subsequent inputs in the same active chat reuse setup. Reports include status,
 artifact links, component outcomes, and measured timings.
 Components retain their cache and duplicate-execution rules.
-After URL validation, webpage indexing queries the local configured Git branch by
-page ID. Any matching artifact, including a partial pair, ends the task with
-“Page already processed.” No match continues processing; query errors stop the task.
 
 [AGENTS.md](AGENTS.md) defines execution and authoring policy.
 [TEMPLATE.md](TEMPLATE.md) defines the single-file recipe convention.

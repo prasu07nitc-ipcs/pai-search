@@ -25,7 +25,6 @@ import subprocess
 import sys
 import time
 import stat
-from urllib.parse import urlsplit, urlunsplit
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -36,9 +35,8 @@ ENV = ROOT / ".venv"
 PYTHON = ENV / "bin/python"
 LOGGER = logging.getLogger(__name__)
 SOURCE_FILE_FIELDS = {
-    "tx-save-article": ("meta_data_file_path", "article_file_path"),
-    "tx-bookmark": ("meta_data_file_path", "context_file_path"),
-    "tx-index": ("context_file_path", "meta_data_file_path"),
+    "tx-webpage-index": ("context_file_path", "article_file_path"),
+    "tx-webpage-search": (),
 }
 
 
@@ -53,77 +51,16 @@ def canonical_hash(value):
 def owned_data_name(transaction_name):
     """Runner-owned mapping; transaction definitions cannot choose destinations."""
     if transaction_name == "tx-articles":
-        raise ValueError("data/articles/ is exclusively reserved for tx-save-article.")
-    return "articles" if transaction_name == "tx-save-article" else transaction_name[3:]
+        raise ValueError("tx-articles is reserved.")
+    if transaction_name == "tx-webpage-search":
+        return "queries"
+    return transaction_name[3:]
 
 
-def repository_http_url(remote):
-    """Return a credential-free HTTP remote, normalizing SSH remotes."""
-    if re.match(r"^[^/@:]+@[^/:]+:.+", remote):
-        host, path = remote.split("@", 1)[1].split(":", 1)
-        remote = "https://" + host + "/" + path
-    try:
-        parsed = urlsplit(remote)
-        if parsed.scheme not in ("http", "https", "ssh") or not parsed.hostname:
-            return "Unavailable"
-        host = parsed.hostname
-        if ":" in host:
-            host = "[" + host + "]"
-        if parsed.scheme != "ssh" and parsed.port:
-            host += ":" + str(parsed.port)
-        path = parsed.path.removesuffix(".git")
-        return urlunsplit(("https" if parsed.scheme == "ssh" else parsed.scheme, host, path, "", ""))
-    except ValueError:
-        return "Unavailable"
-
-
-def source_code_signature(directory):
-    """Snapshot Git metadata for the selected transaction before worker launch."""
-    def git(*args, input=None, allowed=(0,)):
-        result = subprocess.run(["git", "-C", str(directory), *args], input=input,
-                                capture_output=True, text=True, timeout=5,
-                                env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
-        if result.returncode not in allowed:
-            raise ValueError("Git signature capture failed.")
-        return result.stdout
-
-    signature = {"repository_url": "Unavailable", "branch": "Unavailable",
-                 "commit": "Unavailable", "local_changes": []}
-    try:
-        root = Path(git("rev-parse", "--show-toplevel").strip())
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        if any((ancestor / ".git").exists() for ancestor in (directory, *directory.parents)):
-            raise ValueError("Cannot capture source signature inside a Git repository.") from exc
-        return signature
-    # Fail on incomplete snapshots in a Git repository rather than report it clean.
-    signature["repository_url"] = repository_http_url(git("config", "--get", "remote.origin.url", allowed=(0, 1)).strip())
-    signature["commit"] = git("rev-parse", "--verify", "HEAD").strip()
-    signature["branch"] = git("symbolic-ref", "--quiet", "--short", "HEAD", allowed=(0, 1)).strip() or "Detached HEAD"
-    relative = directory.relative_to(root).as_posix()
-    records = git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--", ":(top,literal)" + relative).split("\0")
-    changes = [(record[:2], record[3:]) for record in records if record]
-    if changes:
-        # --no-index also excludes tracked files newly matched by ignore rules.
-        ignored = set(git("-C", str(root), "check-ignore", "--no-index", "-z", "--stdin",
-                          input="\0".join(path for _, path in changes) + "\0", allowed=(0, 1)).split("\0"))
-        signature["local_changes"] = [{"status": status, "path": path} for status, path in changes if path not in ignored]
-    return signature
-
-
-def signature_markdown(signature):
-    """Render the runner-owned snapshot consistently for every transaction."""
-    def escaped(value):
-        return re.sub(r"([\\`*_{}\[\]<>#+|])", r"\\\1", " ".join(value.split()))
-    lines = ["## Source Code Signature", "",
-             "- Git repository URL: " + escaped(signature["repository_url"]),
-             "- Git branch: " + escaped(signature["branch"]),
-             "- Git commit: " + escaped(signature["commit"])]
-    if signature["local_changes"]:
-        lines += ["- Local changes:"] + ["  - " + escaped(c["status"].replace(" ", "."))
-                                        + ": " + escaped(c["path"]) for c in signature["local_changes"]]
-    else:
-        lines.append("- Local changes: None")
-    return "\n".join(lines) + "\n"
+def owned_data_names(transaction_name):
+    if transaction_name == "tx-webpage-index":
+        return ("articles", "index")
+    return (owned_data_name(transaction_name),)
 
 
 def logs_directory(directory):
@@ -166,7 +103,7 @@ def require_new_input(directory, input_id):
                 continue
             if "processed_input" in record:
                 supplied = dict(record["processed_input"])
-                if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") or record["raw_input"] is not None:
+                if directory.name not in SOURCE_FILE_FIELDS or record["raw_input"] is not None:
                     supplied["raw_input"] = record["raw_input"]
             else:
                 supplied = dict(record["transaction_input"])
@@ -229,7 +166,8 @@ def resolve_transaction(name):
     entry = re.search(r"^Entry point: `transaction\.py:([A-Za-z_]\w*)", discovery, re.M)
     if entry is None or entry[1].startswith("_"):
         raise ValueError("TRANSACTION.md must declare a public transaction.py function entry point.")
-    if not re.search(rf"^Data directory: data/{re.escape(owned_data_name(name))}/\s*$", discovery, re.M):
+    declared = ", ".join(f"data/{name}/" for name in owned_data_names(name))
+    if not re.search(rf"^Data directory: {re.escape(declared)}[ \t]*$", discovery, re.M):
         raise ValueError("Data directory must match the transaction name convention.")
     return directory, entry[1]
 
@@ -239,7 +177,7 @@ def validate_input(directory, entry, value):
     """Bind JSON arguments against the source signature without importing transaction code."""
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ValueError("Input must be a JSON object of named arguments.")
-    if directory.name not in ("tx-bookmark", "tx-save-article", "tx-index") and not isinstance(value.get("raw_input"), str):
+    if directory.name not in SOURCE_FILE_FIELDS and not isinstance(value.get("raw_input"), str):
         raise ValueError("raw_input is a required string.")
     json.dumps(value, allow_nan=False)
     tree = ast.parse((directory / "transaction.py").read_text(encoding="utf-8"))
@@ -325,9 +263,9 @@ def validate_output(result, transaction_name=None, run_id=None):
         raise ValueError("Transaction result requires exactly input, output, output_format, status, error, and meta_data.")
     inputs = result["input"]
     if (not isinstance(inputs, dict) or set(inputs) != {"raw_input", "processed_input"}
-            or not (inputs["raw_input"] is None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else isinstance(inputs["raw_input"], str))
+            or not (inputs["raw_input"] is None if transaction_name in SOURCE_FILE_FIELDS else isinstance(inputs["raw_input"], str))
             or not isinstance(inputs["processed_input"], dict)):
-        raise ValueError("input requires processed_input object and raw_input (null for tx-bookmark, tx-save-article and tx-index, otherwise a string).")
+        raise ValueError("input requires processed_input object and raw_input (null for file-based transactions, otherwise a string).")
     if not isinstance(result["meta_data"], dict):
         raise ValueError("meta_data must be an object.")
     if not isinstance(result.get("output_format"), str) or not result["output_format"].strip():
@@ -338,12 +276,12 @@ def validate_output(result, transaction_name=None, run_id=None):
     if result["status"] == "ok":
         if not isinstance(transaction_name, str) or not re.fullmatch(r"tx-[a-z0-9]+(?:-[a-z0-9]+)*", transaction_name):
             raise ValueError("Selected transaction required for output validation.")
-        prefix = f"data/{owned_data_name(transaction_name)}/"
-        if not isinstance(output, list) or not output:
+        prefixes = tuple(f"data/{name}/" for name in owned_data_names(transaction_name))
+        if not isinstance(output, list) or (not output and transaction_name != "tx-webpage-search"):
             raise ValueError("Successful output must be a nonempty array of file paths.")
         for path in output:
-            if (not isinstance(path, str) or not path.startswith(prefix)
-                    or (transaction_name != "tx-index" and ("\\" in path or any(ord(c) < 32 for c in path)))
+            if (not isinstance(path, str) or not path.startswith(prefixes)
+                    or "\\" in path or any(ord(c) < 32 for c in path)
                     or any(part in ("", ".", "..") for part in path.split("/"))):
                 raise ValueError("Output paths must be canonical files in the owned data directory.")
         if len(set(output)) != len(output):
@@ -394,21 +332,22 @@ def prepare_data(transaction_name, data_root):
     if data_root.is_symlink() or data_root.resolve() != data_root:
         raise ValueError("Data root must be canonical and not a symlink.")
     data_root.mkdir(exist_ok=True)
-    target = data_root / owned_data_name(transaction_name)
-    if target.is_symlink() or target.resolve() != target:
-        raise ValueError("Owned data directory must be canonical and not a symlink.")
-    target.mkdir(exist_ok=True)
-    # The worker performs the full-tree check before sandboxing/import. Avoid
-    # scanning unrelated page files again in the parent and after every result.
-    return target
+    targets = tuple(data_root / name for name in owned_data_names(transaction_name))
+    for target in targets:
+        if target.is_symlink() or target.resolve() != target:
+            raise ValueError("Owned data directory must be canonical and not a symlink.")
+        target.mkdir(exist_ok=True)
+    return targets
 
 
-def validate_saved_output(result, transaction_name, destination):
+def validate_saved_output(result, destinations):
     if result["status"] != "ok":
         return
     # Verify only returned paths; the worker scans the owned tree before import.
     for output in result["output"]:
-        relative = Path(output).relative_to(Path("data") / owned_data_name(transaction_name))
+        parts = Path(output).parts
+        destination = next(target for target in destinations if target.name == parts[1])
+        relative = Path(*parts[2:])
         descriptor = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             for component in relative.parts[:-1]:
@@ -429,27 +368,26 @@ def validate_saved_output(result, transaction_name, destination):
 
 
 @log_execution
-def worker(transaction_name, value, run_id=None, data_directory=None, source_signature=None):
+def worker(transaction_name, value, run_id=None, data_directory=None):
     verify_environment()
     directory, entry = resolve_transaction(transaction_name)
     validate_input(directory, entry, value)
     if sys.platform != "darwin":
         raise RuntimeError("This runner requires macOS sandbox_init; refusing unsandboxed execution.")
-    if not isinstance(data_directory, str):
-        raise ValueError("Parent must supply the prepared data directory.")
-    outputs = Path(data_directory)
-    if (not outputs.is_absolute() or outputs.resolve() != outputs or
-            outputs.name != owned_data_name(transaction_name) or not outputs.is_dir()):
-        raise ValueError("Invalid prepared data directory.")
-    if outputs != DATA / owned_data_name(transaction_name):
-        raise ValueError("Production worker destination must match the repository data convention.")
-    validate_tree(outputs)
+    expected = tuple(DATA / name for name in owned_data_names(transaction_name))
+    if data_directory != [str(target) for target in expected]:
+        raise ValueError("Invalid prepared data directories.")
+    outputs = expected
+    for target in outputs:
+        if target.resolve() != target or not target.is_dir():
+            raise ValueError("Invalid prepared data directory.")
+        validate_tree(target)
     # Install a kernel-enforced sandbox before importing transaction code.
     library = ctypes.CDLL("/usr/lib/libsandbox.dylib", use_errno=True)
     library.sandbox_init.argtypes = [ctypes.c_char_p, ctypes.c_uint64, ctypes.POINTER(ctypes.c_char_p)]
     library.sandbox_init.restype = ctypes.c_int
     error = ctypes.c_char_p()
-    readable = [directory, outputs, ENV.resolve(), Path(sys.base_prefix).resolve(),
+    readable = [directory, *outputs, ENV.resolve(), Path(sys.base_prefix).resolve(),
                 Path('/System'), Path('/usr/lib'), Path('/usr/share'),
                 Path('/private/etc'), Path('/private/var/run'), Path('/dev'),
                 Path('/Library/Apple'), Path('/Library/Preferences/SystemConfiguration')]
@@ -458,31 +396,33 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
              '(deny file-link)', '(deny network*)']
     for path in readable:
         rules.append('(allow file-read* (subpath ' + json.dumps(str(path)) + '))')
-    # Grant only the selected source files, never their producer directories.
+    # Grant only the selected source files or an explicitly owned read scope.
     for field in SOURCE_FILE_FIELDS.get(transaction_name, ()):
-        if transaction_name == "tx-bookmark" and field == "context_file_path" and value[field] is None:
-            continue
         source = Path(value[field])
         if not source.is_absolute():
             source = PROJECT / source
         rules.append('(allow file-read* (literal ' + json.dumps(str(source.resolve())) + '))')
-    if transaction_name == "tx-index":
+    if transaction_name == "tx-webpage-search":
+        source_directory = PROJECT / "skills" / "skill-webpage-search" / "output"
+        if source_directory.resolve() != source_directory or not source_directory.is_dir():
+            raise ValueError("Invalid webpage search output directory.")
+        rules.append('(allow file-read* (subpath ' + json.dumps(str(source_directory)) + '))')
+    if transaction_name == "tx-webpage-index":
         zone_file = Path("/usr/share/zoneinfo/Asia/Kolkata").resolve()
         rules.append('(allow file-read* (literal ' + json.dumps(str(zone_file)) + '))')
-    # Bookmark opens each ancestor with O_NOFOLLOW. Permit those directories
-    # themselves, without granting reads of sibling subtrees.
-    for ancestor in outputs.parents:
+    # Permit access to the ancestor directories without exposing siblings.
+    for ancestor in (DATA, *DATA.parents):
         rules.append('(allow file-read* (literal ' + json.dumps(str(ancestor)) + '))')
     rules.append('(allow file-read* (literal ' + json.dumps(str(Path(__file__).resolve())) + '))')
-    if outputs is not None:
-        rules.append('(allow file-write* (subpath ' + json.dumps(str(outputs)) + '))')
-        rules.append('(deny file-write-unlink (literal ' + json.dumps(str(outputs)) + '))')
+    for target in outputs:
+        rules.append('(allow file-write* (subpath ' + json.dumps(str(target)) + '))')
+        rules.append('(deny file-write-unlink (literal ' + json.dumps(str(target)) + '))')
     profile = ''.join(rules).encode('utf-8')
     if library.sandbox_init(profile, 0, ctypes.byref(error)) != 0:
         raise RuntimeError("Cannot apply transaction sandbox: " + (error.value or b"unknown").decode())
     # Verify the relevant restrictions rather than relying only on profile text.
     for target in (ENV / ".runner-write-probe", ROOT / "requirements.txt", ROOT / "uv.lock",
-                   outputs.parent / ".transaction-root-probe",
+                   DATA / ".transaction-root-probe",
                    directory / ".transaction-local-probe"):
         try:
             descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -509,13 +449,11 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
         raise RuntimeError("Sandbox process restriction verification failed.")
     if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None:
         raise ValueError("Invalid execution run_id.")
-    os.environ["PROJECT_TRANSACTION_SOURCE_SIGNATURE"] = json.dumps(source_signature)
-    os.environ["PROJECT_TRANSACTION_SIGNATURE_MARKDOWN"] = signature_markdown(source_signature)
     os.environ["PROJECT_TRANSACTION_RUN_ID"] = run_id
-    os.environ["PROJECT_TRANSACTION_DATA_DIRECTORY"] = str(outputs)
-    if transaction_name in ("tx-save-article", "tx-bookmark", "tx-index"):
+    os.environ["PROJECT_TRANSACTION_DATA_DIRECTORY"] = str(DATA if len(outputs) > 1 else outputs[0])
+    if transaction_name in SOURCE_FILE_FIELDS:
         os.environ["PROJECT_TRANSACTION_INPUT_ROOT"] = str(PROJECT)
-    if transaction_name == "tx-index":
+    if transaction_name == "tx-webpage-index":
         os.environ["PROJECT_TRANSACTION_TIMEZONE"] = "Asia/Kolkata"
     # Keep transaction prints away from the JSON transport on stdout.
     with contextlib.redirect_stdout(sys.stderr):
@@ -531,10 +469,10 @@ def worker(transaction_name, value, run_id=None, data_directory=None, source_sig
                 raise ValueError(f"Incorrect type for argument {name}.")
         result = log_execution(function)(**call_value)
         validate_output(result, transaction_name, run_id)
-        validate_saved_output(result, transaction_name, outputs)
-        if result["input"]["raw_input"] != (None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"]):
+        validate_saved_output(result, outputs)
+        if result["input"]["raw_input"] != (None if transaction_name in SOURCE_FILE_FIELDS else value["raw_input"]):
             raise ValueError("Transaction changed raw_input.")
-        if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") and result["input"]["processed_input"] != value:
+        if transaction_name in SOURCE_FILE_FIELDS and result["input"]["processed_input"] != value:
             raise ValueError("Transaction changed supplied input.")
     print(json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
@@ -552,7 +490,7 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False):
         raise ValueError("Timeout must be greater than zero and at most 300 seconds.")
     logs_directory(directory)
     input_id = canonical_hash(value)
-    if not rerun and transaction_name != "tx-index":
+    if not rerun and transaction_name not in ("tx-webpage-index", "tx-webpage-search"):
         log_execution(require_new_input)(directory, input_id)
     run_id = input_id
     record = {
@@ -565,21 +503,20 @@ def _invoke(transaction_name, value, *, timeout=20, rerun=False):
     worker_stderr = None
     try:
         outputs = prepare_data(transaction_name, DATA)
-        source_signature = source_code_signature(directory)
         completed = subprocess.run(
             [str(PYTHON), "-B", str(Path(__file__).resolve()), "--transaction", transaction_name, "--worker"]
             + (["--verbose"] if LOGGER.isEnabledFor(logging.DEBUG) else []),
-            input=json.dumps({"input": value, "run_id": run_id, "data_directory": str(outputs), "source_signature": source_signature}, ensure_ascii=False, allow_nan=False, separators=(",", ":")), text=True, encoding="utf-8", capture_output=True,
+            input=json.dumps({"input": value, "run_id": run_id, "data_directory": [str(target) for target in outputs]}, ensure_ascii=False, allow_nan=False, separators=(",", ":")), text=True, encoding="utf-8", capture_output=True,
             cwd=str(PROJECT), timeout=timeout, check=True,
         )
         worker_stderr = completed.stderr
         packet = json.loads(completed.stdout)
         result = packet
         validate_output(result, transaction_name, run_id)
-        validate_saved_output(result, transaction_name, outputs)
-        if result["input"]["raw_input"] != (None if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") else value["raw_input"]):
+        validate_saved_output(result, outputs)
+        if result["input"]["raw_input"] != (None if transaction_name in SOURCE_FILE_FIELDS else value["raw_input"]):
             raise ValueError("Transaction changed raw_input.")
-        if transaction_name in ("tx-bookmark", "tx-save-article", "tx-index") and result["input"]["processed_input"] != value:
+        if transaction_name in SOURCE_FILE_FIELDS and result["input"]["processed_input"] != value:
             raise ValueError("Transaction changed supplied input.")
         record.update(
             output=result["output"], output_format=result["output_format"],
@@ -646,7 +583,7 @@ def main():
     )
     if args.worker:
         payload = json.load(sys.stdin)
-        worker(args.transaction, payload["input"], payload["run_id"], payload["data_directory"], payload["source_signature"])
+        worker(args.transaction, payload["input"], payload["run_id"], payload["data_directory"])
     elif args.input is not None:
         value = json.load(sys.stdin) if args.input == "-" else json.loads(args.input)
         try:

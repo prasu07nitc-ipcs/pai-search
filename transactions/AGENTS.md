@@ -31,11 +31,12 @@ change for compliance; stop on conflicts unless the user changes this policy.
 
 ## Input and ownership
 
-Exactly four fields, no defaults or raw_input: `page_id`, `meta_data_file_path`,
-`context_file_path`, `article_file_path`. Consumed paths are nonempty strings;
-unused paths accept strings or null and are ignored. Prefer null. Paths are absolute
-or repository-relative, independent of producer. Consumed files must be regular UTF-8,
-without traversal, symlinks (including parents), or hard links.
+For tx-webpage-index, accept exactly `context_file_path` and `article_file_path`.
+Derive identity and metadata from those files under its contract.
+For tx-webpage-search, accept exactly the empty object and discover saved reports
+in the allowed output folder.
+Consumed paths are nonempty strings, absolute or repository-relative. Files must
+be regular UTF-8, without traversal, symlinks (including parents), or hard links.
 
 Metadata is a finite JSON object containing url. page_id is 64 lowercase hexadecimal
 characters equal to SHA-256 of the exact UTF-8 URL; optional metadata page_id must
@@ -45,13 +46,16 @@ IDNA hostname, retain www, strip trailing DNS dot/port, replace dots with unders
 
 | Transaction | Consumed files | Owned output below data/ |
 | --- | --- | --- |
-| tx-bookmark | metadata, optional contexts | bookmark/<domain>/<page_id>/{bookmark,meta}.md |
-| tx-index | metadata, contexts | index/<exact entity_name>/<domain>/<page_id>/{utterances,meta}.md |
-| tx-save-article | metadata, article | articles/<domain>/<page_id>/{article,meta}.md |
+| tx-webpage-index | contexts, article with metadata footer | articles/<domain>/<page_id>.md and index/<domain>/<normalized_entity>/<page_id>.md |
+| tx-webpage-search | saved reports in the search skill output folder | queries/<run_id>.md |
 
-Workers may read runtime/implementation files and only their literal consumed sources;
-no producer-directory or unused-input grants, network or subprocess access. Writes
-are confined to the selected subtree; never sibling data, logs, implementation or
+Workers may read runtime/implementation files and their literal consumed sources.
+`tx-webpage-search` also has read-only access to
+`skills/skill-webpage-search/output/` to discover reports. Its sibling
+`input/` and `logs/` directories remain outside that grant. Other transactions
+have no producer-directory grants. Workers have no unused-input grants, network
+or subprocess access. Writes
+are confined to each transaction’s declared subtrees. Never write unrelated data, logs, implementation or
 runtime. Ownership limits framework workers, not arbitrary host processes. Reject
 aliases escaping ownership; pin destinations with no-follow descriptors. Create owned
 directories only during authorized execution. Tools retain their output permissions.
@@ -59,37 +63,37 @@ directories only during authorized execution. Tools retain their output permissi
 Each direct lowercase kebab-case tx-<name> directory (under 64 characters) contains
 transaction.py, AGENTS.md and TRANSACTION.md; no placeholders. TRANSACTION.md has no
 frontmatter and declares Name, Description, public Entry point, Instructions link and
-runner-owned Data directory. tx-save-article maps to articles; tx-articles is reserved.
+runner-owned Data directory. tx-webpage-index declares both directories in that field.
 
 ## Results and durability
 
 Return exactly input, output, output_format, status, error, meta_data; all finite JSON.
-input contains exactly raw_input=null and processed_input=the four supplied arguments.
+input contains exactly raw_input=null and processed_input=the supplied arguments.
 output_format=markdown. Success: status=ok, error=null, output=unique nonempty array
-of existing repository-relative owned files. Return the main file before meta.md,
+of existing repository-relative owned files. Webpage search may return an empty
+array when no reports are missing. Return the main file before meta.md,
 in first-entity order for index. Failure: status=error, output=null, error has exactly
 nonempty code/message strings. meta_data is an object; affected_paths lists known
 replacements after partial failure. Result rejection cannot undo writes.
 
-Stage both complete page files under exclusive temporary names, flush/fsync before
-replacing either, atomically replace each, then fsync the page directory. Temporary
-cleanup is allowed. No locks, pair/batch atomicity, rollback, automatic persisted-data
+Stage all complete files under exclusive temporary names, flush/fsync before
+replacing any, atomically replace each, then fsync its containing directory. Temporary
+cleanup is allowed. Webpage search locks its destination directory to serialize
+its missing-file check and publication. Other transactions do not lock.
+No pair/batch atomicity, rollback, automatic persisted-data
 deletion, stale-entity removal or legacy migration. Last replacement wins per file,
 regardless of start order. Interruption/concurrency can mix versions or leave temporary
 files and unreported writes. Retry the complete input after reconciling uncertain effects.
 Historical index locks/journals remain unused and intact.
 
-Bookmark/article identical successful arguments require explicit confirmation before
---rerun; index duplicates need none. Identity includes all supplied paths/nulls, not
-source bytes. Concurrent duplicate checks do not reserve execution. Declined or
-pre-execution rejected inputs create no production record.
+Repeated webpage-index and webpage-search inputs may run without confirmation.
 
 Stdout is one compact JSON result. Exit 0 includes handled errors: inspect status.
-Exit 2 covers parser errors/noninteractive duplicate refusal; unhandled runner errors
+Exit 2 covers parser errors; unhandled runner errors
 exit nonzero with stderr diagnostics. --timeout is finite, >0, at most 300 seconds
-(default 20); preparation and Git capture are outside it. --verbose adds function timing.
+(default 20); preparation is outside it. --verbose adds function timing.
 
-## Records and source signature
+## Records
 
 Parent-owned transaction-local logs/run.log is append-only UTF-8 JSON Lines: serialize
 once, one O_APPEND write, fsync. Short writes fail and can leave incomplete tails;
@@ -109,18 +113,6 @@ transaction_input-only records.
 run_id = SHA-256 of UTF-8 json.dumps(supplied_input, sort_keys=True,
 separators=(",", ":"), ensure_ascii=False, allow_nan=False). Repeated input keeps the
 ID but appends separate records. Object key order is irrelevant; array order matters.
-Replay needs the same source bytes, runtime and Git snapshot; timestamps/timezone/Git
-state can change outputs. Byte-identical replay is not promised.
-
-Only meta.md contains identity and Source Code Signature (H2 for bookmark/index,
-H1 for article). Immediately before worker launch, the parent captures selected-directory
-Git state into PROJECT_TRANSACTION_SOURCE_SIGNATURE and
-PROJECT_TRANSACTION_SIGNATURE_MARKDOWN; these are never caller inputs. Include repository
-URL, branch, full commit SHA and Local changes; no repository-name field. Normalize SSH
-origins to HTTPS where possible; strip credentials, query, fragment and trailing .git.
-Use Unavailable outside Git/for missing remote, Detached HEAD when detached; incomplete
-snapshots inside Git fail. Include selected-transaction staged/unstaged/untracked paths,
-excluding ignored paths even when tracked and excluding shared runner changes. Use
-repository-relative paths, two-column porcelain status with unchanged columns as dots,
-?? for untracked, deletion/addition for renames; empty renders `- Local changes: None`.
-This records paths/status, not diffs or an atomic snapshot against concurrent edits.
+Replay needs the same source bytes and runtime. Runtime timestamps can change
+outputs. tx-webpage-index preserves the article verbatim and emits no source
+signature or sidecar.

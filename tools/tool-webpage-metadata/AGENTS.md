@@ -33,12 +33,13 @@ each a string or null:
 | `keywords` | Explicit keywords; keyword arrays become comma-separated text |
 | `datePublished` | Explicitly identified publication date |
 | `dateModified` | Explicitly identified update or modification date |
+| `requested_url` | Exact input URL used to compute the page ID |
 | `page_id` | Validated caller-supplied SHA-256 identity of the input URL |
 
 `page_id` identifies the exact input URL even when redirects change the fetch URL
 or `og:url` differs or is missing. It also serves as the runner's run ID. Historical outputs are not rewritten.
 
-Missing metadata is null and does not make a fetch fail. Text values are trimmed
+Historical cached files may omit `requested_url`. Missing publisher metadata is null and does not make a fetch fail. Text values are trimmed
 and HTML entities decoded; relative URLs are preserved. Dates are normalized as
 described below. Common publisher date labels are supported; creation dates are
 not substituted.

@@ -1,46 +1,19 @@
-"""Fetch Open Graph properties, keywords, and dates; standard library only.
-
-Runtime integration (owned by the shared runner, not this module):
-Use only tools/.venv/bin/python through tools/runner.py with an explicit tool
-selection and working directory. The runner verifies sys.prefix and input binding,
-then applies and probes the macOS filesystem/subprocess sandbox before import.
-Workers may write only in their validated tool-local output/ directory, and cannot
-fork/exec or mutate the environment. The parent validates/prepares output/ and
-owns all log writes; this module does not implement sandbox enforcement.
-
-The parent writes production results to logs/run.log and diagnostics/timing to
-logs/runner.log under this tool. Record formats and run-ID rules:
-tools/AGENTS.md#production-logging. Production run IDs equal page_id. The runner
-supplies PROJECT_TOOL_RUN_ID before import. Historical logs and outputs are not
-rewritten automatically.
-
-From the parent project directory containing tools/, select this tool using
-tools/.venv/bin/python -B tools/runner.py --tool <tool-name>.
---input accepts named JSON arguments. The runner enforces the production result
-envelope. Do not install/repair dependencies during execution.
-
-Select --tool tool-webpage-metadata; keep the process timeout at least 20
-seconds (the runner default). Python 3.11+ standard library only.
-"""
+"""Fetch Open Graph properties, keywords, and dates."""
 
 from __future__ import annotations
 
 import hashlib
-import http.client
-import ipaddress
 import json
 import os
 from pathlib import Path
 import uuid
 import re
-import socket
-import ssl
-import time
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Literal, TypedDict
-from urllib.parse import quote, urldefrag, urljoin, urlsplit
+
+from webpage_http import WebpageError, download_html
 
 
 class CrawlError(TypedDict):
@@ -48,31 +21,7 @@ class CrawlError(TypedDict):
     message: str
 
 
-class _PayloadResult(TypedDict):
-    requested_url: str | None
-    final_url: str | None
-    status: Literal["ok", "error"]
-    open_graph: dict[str, str | None]
-    keywords: str | None
-    datePublished: str | None
-    dateModified: str | None
-    error: CrawlError | None
-
-
 _PROPERTIES = ("og:title", "og:description", "og:image", "og:url", "og:site_name", "og:type", "article:section")
-# Identity encoding avoids decompression beyond the 2-MiB body cap.
-# Socket deadlines bound individual operations; blocking DNS additionally needs
-# the runner process timeout (default 20s, configurable up to 300s).
-_LIMIT = 2 * 1024 * 1024
-_SECONDS = 15.0
-
-
-class _Failure(Exception):
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
-        self.code = code
-
-
 # Explicit date labels only: separator/case variants are normalized, not inferred.
 _DATE_LABELS = {
     "datePublished": {
@@ -179,7 +128,8 @@ class _Parser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
-        if tag == "script" and (attributes.get("type") or "").lower().strip() == "application/ld+json":
+        if (tag == "script" and (attributes.get("type") or "").lower().strip() == "application/ld+json"
+                and not all(self.metadata.values())):
             self._jsonld = []
         if tag == "meta":
             key = attributes.get("property") or attributes.get("name")
@@ -191,7 +141,7 @@ class _Parser(HTMLParser):
                 self.metadata["keywords"] = value
         else:
             value = (attributes.get("content") or attributes.get("datetime") or "").strip()
-        if not value:
+        if not value or (self.metadata["datePublished"] and self.metadata["dateModified"]):
             return
         # Inspect every semantic attribute so an unrelated name cannot hide itemprop.
         # A time element may additionally label its datetime using class/id tokens.
@@ -242,180 +192,6 @@ class _Parser(HTMLParser):
     handle_startendtag = handle_starttag
 
 
-def _remaining(deadline: float) -> float:
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise _Failure("timeout", "The page could not be fetched within 15 seconds.")
-    return remaining
-
-
-def _validate(url: str):
-    try:
-        if not url or len(url) > 8192 or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url):
-            raise ValueError()
-        parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            raise ValueError()
-        if parts.username is not None or parts.password is not None or "\\" in url:
-            raise ValueError()
-        host = parts.hostname.encode("idna").decode("ascii")
-        if "%" in host:
-            raise ValueError()
-        try:
-            ipaddress.ip_address(host)
-        except ValueError:
-            labels = host.rstrip(".").split(".")
-            if len(host) > 253 or any(
-                not re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?", label)
-                for label in labels
-            ):
-                raise ValueError()
-        port = parts.port
-        if parts.netloc.endswith(":") or port == 0:
-            raise ValueError()
-        return parts, host, port or (443 if parts.scheme == "https" else 80)
-    except (ValueError, UnicodeError):
-        raise _Failure("invalid_url", "Provide a valid absolute HTTP(S) URL without credentials.") from None
-
-
-def _addresses(host: str, port: int):
-    # Reject a mixed public/private DNS answer, then pin the first validated IP.
-    # This prevents later connection-time DNS resolution from changing the target.
-    try:
-        addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        raise _Failure("dns_error", "The hostname could not be resolved.") from None
-    if not addresses:
-        raise _Failure("dns_error", "The hostname returned no addresses.")
-    for _, _, _, _, address in addresses:
-        ip = ipaddress.ip_address(address[0])
-        mapped = getattr(ip, "ipv4_mapped", None)
-        if not ip.is_global or ip.is_multicast or (mapped and not mapped.is_global):
-            raise _Failure("blocked_address", "The URL resolves to a non-public address.")
-    return addresses[0]
-
-
-class _PinnedConnection(http.client.HTTPConnection):
-    def __init__(self, host, port, address, secure, deadline):
-        super().__init__(host, port, timeout=_remaining(deadline))
-        self.address = address
-        self.secure = secure
-        self.deadline = deadline
-
-    def connect(self):
-        family, kind, protocol, _, address = self.address
-        sock = socket.socket(family, kind, protocol)
-        try:
-            sock.settimeout(_remaining(self.deadline))
-            sock.connect(address)
-            if self.secure:
-                sock.settimeout(_remaining(self.deadline))
-                sock = ssl.create_default_context().wrap_socket(sock, server_hostname=self.host)
-            self.sock = sock
-        except BaseException:
-            sock.close()
-            raise
-
-
-def _crawl_open_graph(url: str) -> _PayloadResult:
-    """Fetch an absolute public HTTP(S) URL and return metadata or a structured error.
-
-    No optional inputs. Uses a 15-second cooperative network budget, five redirects,
-    and a 2-MiB body limit. A runner-enforced process timeout must also bound DNS.
-    """
-    result: _PayloadResult = {
-        "requested_url": url if isinstance(url, str) else None,
-        "final_url": None,
-        "status": "error",
-        "open_graph": dict.fromkeys(_PROPERTIES),
-        "keywords": None,
-        "datePublished": None,
-        "dateModified": None,
-        "error": None,
-    }
-    deadline = time.monotonic() + _SECONDS
-    try:
-        if not isinstance(url, str):
-            raise _Failure("invalid_url", "URL must be a string.")
-        _validate(url)
-        current = urldefrag(url)[0]
-        visited: set[str] = set()
-        for hop in range(6):
-            if current in visited:
-                raise _Failure("redirect_error", "A redirect loop was detected.")
-            visited.add(current)
-            parts, host, port = _validate(current)
-            address = _addresses(host, port)
-            _remaining(deadline)
-            connection = _PinnedConnection(host, port, address, parts.scheme == "https", deadline)
-            try:
-                target = quote(parts.path or "/", safe="/%:@!$&'()*+,;=-._~")
-                if parts.query:
-                    target += "?" + quote(parts.query, safe="/%?:@!$&'()*+,;=-._~")
-                result["final_url"] = current
-                # Fixed Firefox-style identity for site compatibility; this is
-                # still an HTTP client with no browser rendering or browser state.
-                connection.request("GET", target, headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0",
-                    "Accept": "text/html, application/xhtml+xml",
-                    "Accept-Encoding": "identity",
-                    "Connection": "close",
-                })
-                network_socket = connection.sock
-                network_socket.settimeout(_remaining(deadline))
-                with connection.getresponse() as response:
-                    if response.status in (301, 302, 303, 307, 308):
-                        location = response.getheader("Location")
-                        if not location or hop == 5:
-                            raise _Failure("redirect_error", "Redirect location missing or five-redirect limit exceeded.")
-                        current = urldefrag(urljoin(current, location))[0]
-                        continue
-                    if not 200 <= response.status < 300:
-                        raise _Failure("http_error", f"The server returned HTTP {response.status}.")
-                    if response.headers.get_content_type() not in ("text/html", "application/xhtml+xml"):
-                        raise _Failure("unsupported_content_type", "The response is not HTML.")
-                    if response.getheader("Content-Encoding", "identity").strip().lower() != "identity":
-                        raise _Failure("unsupported_encoding", "The server returned compressed content despite an identity request.")
-                    chunks = bytearray()
-                    while True:
-                        # The response retains its socket even if HTTPConnection detaches it.
-                        remaining = _remaining(deadline)
-                        network_socket.settimeout(remaining)
-                        block = response.read1(min(65536, _LIMIT + 1 - len(chunks)))
-                        _remaining(deadline)
-                        if not block:
-                            if response.length not in (None, 0):
-                                raise _Failure("network_error", "The response body ended prematurely.")
-                            break
-                        chunks.extend(block)
-                        if len(chunks) > _LIMIT:
-                            raise _Failure("response_too_large", "The HTML response exceeds 2 MiB.")
-                    # Decode the declared charset; absent/unknown labels fall back
-                    # to UTF-8 with replacement rather than aborting extraction.
-                    charset = response.headers.get_content_charset() or "utf-8"
-                    try:
-                        html = chunks.decode(charset, errors="replace")
-                    except (LookupError, UnicodeError):
-                        html = chunks.decode("utf-8", errors="replace")
-                    parser = _Parser()
-                    parser.feed(html)
-                    parser.close()
-                    _remaining(deadline)
-                    result.update(status="ok", open_graph=parser.values, **parser.metadata)
-                    return result
-            finally:
-                connection.close()
-    except _Failure as exc:
-        result["error"] = {"code": exc.code, "message": str(exc)}
-    except (TimeoutError, socket.timeout):
-        result["error"] = {"code": "timeout", "message": "The page could not be fetched within the time limit."}
-    except ssl.SSLError:
-        result["error"] = {"code": "tls_error", "message": "A secure connection could not be established."}
-    except (OSError, http.client.HTTPException):
-        result["error"] = {"code": "network_error", "message": "The HTTP request failed or the response was invalid."}
-    return result
-
-
 class CrawlInput(TypedDict):
     page_id: str
     processed_input: dict[str, str]
@@ -434,7 +210,7 @@ def crawl_open_graph(url: str, page_id: str) -> CrawlResult:
     """Fetch metadata for a public URL, preserving its validated input identity.
 
     page_id must be the lowercase SHA-256 hexadecimal digest of the exact input URL.
-    URL constraints and the 15-second network budget match _crawl_open_graph.
+    Uses the shared URL constraints and 15-second network budget.
     Success atomically replaces tool-local output/<page_id>.json with UTF-8 JSON text.
     Expected fetch/write failures return output=null and a structured error.
     """
@@ -446,13 +222,17 @@ def crawl_open_graph(url: str, page_id: str) -> CrawlResult:
     if not re.fullmatch(r"[0-9a-f]{64}", page_id) or page_id != hashlib.sha256(url.encode("utf-8")).hexdigest():
         result["error"] = {"code": "invalid_page_id", "message": "page_id must equal the lowercase SHA-256 digest of the supplied URL."}
         return result
-    payload = _crawl_open_graph(url)
+    payload = download_html(url)
     result["meta_data"]["final_url"] = payload["final_url"]
     if payload["status"] == "error":
         result["error"] = payload["error"]
         return result
-    content = {key.split(":", 1)[-1]: item for key, item in payload["open_graph"].items()}
-    content.update({key: payload[key] for key in ("keywords", "datePublished", "dateModified")})
+    parser = _Parser()
+    parser.feed(payload["html"])
+    parser.close()
+    content = {key.split(":", 1)[-1]: item for key, item in parser.values.items()}
+    content.update(parser.metadata)
+    content["requested_url"] = url
     for field in ("datePublished", "dateModified"):
         content[field], info = _normalize_date(content[field])
         result["meta_data"]["date_normalization"][field] = info
@@ -460,7 +240,7 @@ def crawl_open_graph(url: str, page_id: str) -> CrawlResult:
     try:
         path = _write_output(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=2) + "\n", page_id)
         result.update(status="ok", output=path)
-    except _Failure as exc:
+    except WebpageError as exc:
         result["error"] = {"code": exc.code, "message": str(exc)}
     return result
 
@@ -470,7 +250,7 @@ def _write_output(content: str, page_id: str) -> str:
     # Resolve output relative to this module, never the caller working directory.
     tool_root = Path(__file__).resolve().parent
     if re.fullmatch(r"[0-9a-f]{64}", page_id) is None:
-        raise _Failure("output_write_error", "Output page_id is missing or invalid.")
+        raise WebpageError("output_write_error", "Output page_id is missing or invalid.")
     filename = f"{page_id}.json"
     descriptor = None
     temporary = None
@@ -492,7 +272,7 @@ def _write_output(content: str, page_id: str) -> str:
         temporary = None
         return f"{tool_root.name}/output/{filename}"
     except OSError as exc:
-        raise _Failure("output_write_error", "Could not save <page_id>.json in the tool output directory.") from exc
+        raise WebpageError("output_write_error", "Could not save <page_id>.json in the tool output directory.") from exc
     finally:
         if temporary is not None:
             try:

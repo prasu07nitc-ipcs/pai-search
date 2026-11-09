@@ -12,3 +12,4 @@ data/tx-commit-and-push/receipts/
 data/index/*
 data/articles/*
 data/bookmark/*
+/data/queries/

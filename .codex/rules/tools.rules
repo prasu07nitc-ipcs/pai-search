@@ -6,15 +6,15 @@ prefix_rule(
         "-B",
         "tools/runner.py",
         "--tool",
-        ["tool-url-validate", "tool-webpage-metadata", "tool-webpage-markdown", "tool-index-search"],
+        ["tool-webpage-validator", "tool-webpage-metadata", "tool-webpage-markdown", "tool-webpage-article"],
     ],
     decision = "allow",
     justification = "Launch approved project tools through their dedicated sandboxing runner",
     match = [
-        "tools/.venv/bin/python -B tools/runner.py --tool tool-url-validate",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-validator",
         "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-metadata",
         "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-markdown",
-        "tools/.venv/bin/python -B tools/runner.py --tool tool-index-search",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-article",
     ],
     not_match = [
         "tools/.venv/bin/python -m pip install example",

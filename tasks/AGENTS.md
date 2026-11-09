@@ -62,8 +62,8 @@ when supported). Supply the repository root, exact named-input invocation, selec
 component instruction paths, applicable shared policies, authorized scope, and any
 explicit reference date/timezone the component needs. Do not pass unrelated task
 history, upstream payloads already available through named file inputs, or another
-component's instructions. Let each component perform its own cache lookup and
-validation. Keep the configured model and reasoning settings unless explicitly
+component's instructions. Follow the selected component's execution contract.
+Keep the configured model and reasoning settings unless explicitly
 authorized to change them. A completed agent may be reused only for the same
 component, with fresh explicit input state and setup invalidation checks; do not
 reuse an agent across different component roles.

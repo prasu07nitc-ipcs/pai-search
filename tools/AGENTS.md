@@ -21,7 +21,7 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 - Keep the detailed purpose, input and output contracts, validation, execution rules, required configuration, dependencies, permissions, and side effects in the tool's `AGENTS.md`.
 - Implement the capability as a Python function in `tool.py`, with explicit typed parameters, documented constraints and defaults, and a structured result serializable to JSON. Define expected errors and failure behavior.
 - Every result is a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
-- `input` contains exactly the required identity string and `processed_input` (arguments with defaults applied, excluding that identity). The identity is `input_text` for `tool-url-validate`, `page_id` for the two webpage tools, and `raw_input` for other tools. Preserve it unchanged. Interpretation belongs to the caller.
+- `input` contains exactly the required identity string and `processed_input` (arguments with defaults applied, excluding that identity). The identity is `input_text` for `tool-webpage-validator`, `page_id` for the two webpage tools, and `raw_input` for other tools. Preserve it unchanged. Interpretation belongs to the caller.
 - `status` is `ok` or `error`. Success requires `error: null` and `output` equal to the selected tool's `tool-<name>/output/<page_id>.json` or `.md` path, relative to `tools/`. Failure requires `output: null` and `error` containing exactly nonempty string `code` and `message` fields. `output_format` is `json` or `markdown`, including on failure; `meta_data` is an object.
 - Successful results expose the validated `page_id` in `input` or `meta_data`. Atomically replace the corresponding payload on success; preserve previous payloads on failure where possible. Different IDs retain separate files; concurrent writes to one ID use last replacement wins. The runner enforces the envelope; each tool owns its saved payload and metadata contract.
 
@@ -121,12 +121,8 @@ than repeat the shared logging specification.
 - The `output/` directory must be a real directory, never a symlink. Derive its location from the selected tool directory, not the incidental working directory or a caller-selected output directory. The parent runner may create this directory when required for an authorized invocation and must validate it before granting worker write access.
 - Reject symlinks within `output/` and output paths containing traversal outside it. File access must not escape through symlinks, other filesystem aliases, or directory replacement. Enforce the write boundary through OS sandboxing or permissions, not path-string checks alone.
 - Workers must not write elsewhere, including their tool root outside `output/`, other tools' directories, runtime or system locations, temporary directories, environment files, or runner-owned logs. Tool definitions and instructions remain protected from worker writes. Subprocess restrictions remain in force.
-- Workers may read their own tool directory and the read-only interpreter, installed dependencies, runner infrastructure, and system resources required for execution. Other tools' directories and unrelated user files are outside the permitted read scope. Runtime read access does not grant write access.
-- Exception: `tool-index-search` may also read only the repository trees
-  `skills/skill-query-interpreter/output/`, `data/bookmark/`, and `data/index/`. The runner grants
-  these read-only roots exclusively to that tool, rejecting aliased roots.
-  Requirement paths must remain within the former tree; bookmark scans within
-  the bookmark tree; utterance collection within the index tree. No additional write access is granted.
+- All tool workers may read files under the repository root and its subdirectories, including other tools' outputs. They may also read the interpreter, installed dependencies, and system resources required for execution. Repository symlinks do not extend read access beyond those permitted locations. Read access does not grant write access.
+- Tool-specific input paths and data contracts still apply. The repository Git policy still governs Git operations.
 - Tool instructions must document output-file behavior, returned paths, and applicable side effects. File permissions do not authorize environment management.
 
 ## Environment management
