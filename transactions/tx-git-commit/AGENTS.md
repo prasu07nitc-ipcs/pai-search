@@ -13,10 +13,19 @@ repository or remote fail validation.
 Stop before contacting the remote if Git reports any staged, unstaged, or
 untracked path outside the three allowed directories. Recheck before staging.
 Git-ignored untracked files are excluded from this check.
+Force-add ignored files only within the three allowed directories.
 Use a full checkout with an existing local commit so the runner can validate
 outgoing history.
+An existing remote branch must be an ancestor of local HEAD. For a new remote
+branch, history reachable from other advertised remote branches is excluded
+from the scope check. On an empty remote, the check covers the entire local history.
+The push requires the remote branch to still match the observed tip.
 
 Use git-config.json for the commit identity. Do not switch branches or run
 concurrent Git operations in the same checkout during execution. An error
 after staging can leave eligible changes staged. If a commit was created,
-the result reports its ID. Re-run with the same message to retry a push.
+the result reports its ID. Re-run the transaction to retry a push.
+Use the checkout machine's local date in dd-mm-yy format as the entire
+commit message. Discard any supplied message text.
+Git commands time out individually after 60 seconds. After a timeout, check
+the checkout and remote before retrying because the operation may have completed.

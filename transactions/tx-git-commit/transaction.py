@@ -1,5 +1,6 @@
 """Scoped Git commits and pushes for the common transaction runner."""
 
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -8,19 +9,27 @@ import subprocess
 
 SCOPE = ("data/articles", "data/index", "data/queries")
 CONFIG = Path(__file__).with_name("git-config.json")
+PREFIXES = tuple(os.fsencode(directory + "/") for directory in SCOPE)
+OPERATION_MARKERS = (
+    "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge",
+    "rebase-apply", "sequencer",
+)
 
 
-def git(*args):
+def git(*args, input_bytes=None):
     environment = {
         key: value for key, value in os.environ.items() if not key.startswith("GIT_")
     }
+    environment["GIT_TERMINAL_PROMPT"] = "0"
     result = subprocess.run(
         ["git", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", *args],
         env=environment,
-        stdin=subprocess.DEVNULL,
+        input=input_bytes,
+        stdin=subprocess.DEVNULL if input_bytes is None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=True,
+        timeout=60,
     )
     return result.stdout
 
@@ -30,9 +39,8 @@ def line(*args):
 
 
 def check_paths(paths):
-    prefixes = tuple(os.fsencode(directory + "/") for directory in SCOPE)
-    for path in paths.split(b"\0"):
-        if path and not path.startswith(prefixes):
+    for path in paths:
+        if path and not path.startswith(PREFIXES):
             raise ValueError(f"Path outside commit scope: {os.fsdecode(path)!r}")
 
 
@@ -41,12 +49,21 @@ def check_worktree():
         "status", "--porcelain=v1", "-z", "--untracked-files=all",
         "--no-renames", "--ignore-submodules=none",
     ).split(b"\0")
-    check_paths(b"\0".join(entry[3:] for entry in entries if entry))
+    check_paths(entry[3:] for entry in entries if entry)
 
 
-def run(message, result):
-    if not message.strip() or "\0" in message:
-        raise ValueError("Supply a nonempty commit message.")
+def check_history(head, bases):
+    exclusions = ["--not", *bases] if bases else []
+    commits = git("rev-list", head, *exclusions)
+    if commits:
+        paths = git(
+            "diff-tree", "--stdin", "--root", "-m", "-r", "--no-commit-id",
+            "--name-only", "--no-renames", "-z", input_bytes=commits,
+        )
+        check_paths(paths.split(b"\0"))
+
+
+def run(result):
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     author, email = (config[key] for key in ("author", "email"))
     for value in (author, email):
@@ -62,10 +79,8 @@ def run(message, result):
     branch_ref = line("symbolic-ref", "HEAD")
     branch = branch_ref.removeprefix("refs/heads/")
     head = line("rev-parse", "--verify", "HEAD")
-    if any(Path(line("rev-parse", "--git-path", marker)).exists() for marker in (
-        "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge",
-        "rebase-apply", "sequencer",
-    )):
+    marker_args = [arg for marker in OPERATION_MARKERS for arg in ("--git-path", marker)]
+    if any(Path(path).exists() for path in line("rev-parse", *marker_args).splitlines()):
         raise ValueError("Finish the in-progress Git operation first.")
     check_worktree()
 
@@ -90,21 +105,34 @@ def run(message, result):
 
     # Fetch from the actual push destination, including when pushurl differs.
     advertised = line("ls-remote", "--heads", "--", destination)
-    heads = dict((ref, oid) for oid, ref in (
+    heads = {ref: oid for oid, ref in (
         entry.split("\t", 1) for entry in advertised.splitlines()
-    ))
+    )}
     tip = heads.get(branch_ref, "")
     bases = [tip] if tip else sorted(set(heads.values()))
-    if bases:
-        git("fetch", "--no-tags", "--no-write-fetch-head", "--", destination, *bases)
-    if tip:
-        git("merge-base", "--is-ancestor", tip, head)
-    exclusions = ["--not", *bases] if bases else []
-    for commit in line("rev-list", head, *exclusions).splitlines():
-        check_paths(git(
-            "diff-tree", "--root", "-m", "-r", "--no-commit-id",
-            "--name-only", "--no-renames", "-z", commit,
-        ))
+    if bases and head != tip:
+        objects = git(
+            "cat-file", "--batch-check=%(objectname) %(objecttype)",
+            input_bytes=("\n".join(bases) + "\n").encode("ascii"),
+        )
+        missing = [
+            oid for oid, info in zip(bases, objects.splitlines(), strict=True)
+            if not info.endswith(b" commit")
+        ]
+        if missing:
+            git(
+                "fetch", "--no-tags", "--no-recurse-submodules",
+                "--no-write-fetch-head", "--", destination, *missing,
+            )
+    if tip and head != tip:
+        try:
+            git("merge-base", "--is-ancestor", tip, head)
+        except subprocess.CalledProcessError as error:
+            if error.returncode == 1:
+                raise ValueError("The remote branch has commits missing locally.") from error
+            raise
+    if head != tip:
+        check_history(head, bases)
 
     if line("symbolic-ref", "HEAD") != branch_ref or line("rev-parse", "HEAD") != head:
         raise ValueError("The checkout changed during validation.")
@@ -116,27 +144,28 @@ def run(message, result):
         or any(path.startswith(os.fsencode(directory + "/")) for path in tracked)
     ]
     if paths:
-        git("add", "-A", "--", *paths)
+        git("add", "-f", "-A", "--", *paths)
     staged = git("diff", "--cached", "--name-only", "--no-renames", "-z")
-    check_paths(staged)
+    check_paths(staged.split(b"\0"))
     if staged:
+        message = datetime.now().strftime("%d-%m-%y")
         git(
             "-c", f"user.name={author}", "-c", f"user.email={email}",
             "-c", "commit.gpgSign=false", "commit", "--author",
             f"{author} <{email}>", "-m", message,
         )
-        head = line("rev-parse", branch_ref)
-        result["commit"] = head
-        check_paths(git(
-            "diff-tree", "-r", "--no-commit-id", "--name-only", "--no-renames",
-            "-z", head + "^", head,
-        ))
+        commit = line("rev-parse", branch_ref)
+        result["commit"] = commit
+        if line("rev-list", "--parents", "-n", "1", commit).split() != [commit, head]:
+            raise ValueError("The new commit does not have the expected parent.")
+        check_history(commit, [head])
+        head = commit
 
     if head != tip:
         if line("symbolic-ref", "HEAD") != branch_ref or line("rev-parse", "HEAD") != head:
             raise ValueError("The checkout changed before push.")
         git(
-            "-c", "push.followTags=false", "push", "--no-follow-tags",
+            "push", "--no-follow-tags", "--recurse-submodules=no",
             f"--force-with-lease={branch_ref}:{tip}", "--", destination,
             f"{head}:{branch_ref}",
         )
@@ -147,15 +176,17 @@ def run(message, result):
 def execute(value):
     result = {"status": "error", "commit": None, "pushed": False}
     try:
-        if not isinstance(value, dict) or value.keys() != {"message"} or not isinstance(value["message"], str):
-            raise ValueError('Supply an object containing exactly one string field, "message".')
+        if not isinstance(value, dict) or value.keys() - {"message"} or not isinstance(value.get("message", ""), str):
+            raise ValueError('Supply an empty object or an object with only a string "message".')
         if shutil.which("git") is None:
             raise ValueError("Git is required.")
-        run(value["message"], result)
+        run(result)
     except subprocess.CalledProcessError as error:
-        result["error"] = error.stderr.decode(errors="replace").strip() or (
+        result["error"] = error.stderr[:1024].decode(errors="replace").strip() or (
             f"Git exited with status {error.returncode}."
         )
+    except subprocess.TimeoutExpired:
+        result["error"] = "Git timed out after 60 seconds. Check the checkout and remote before retrying."
     except (OSError, ValueError, KeyError, TypeError) as error:
         result["error"] = str(error)
     return result
