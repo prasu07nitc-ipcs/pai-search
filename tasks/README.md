@@ -3,6 +3,7 @@
 | Recipe | Input | Saved outputs |
 | --- | --- | --- |
 | [task-webpage-index](task-webpage-index/TASK.md) | URL or text containing one | Saved article and per-entity Markdown indexes |
+| [task-webpage-search-publish](task-webpage-search-publish/TASK.md) | None | Exported query reports committed and pushed |
 
 Run `task-webpage-index: https://example.com/article`.
 Components own their input resolution, user interaction, and authorization.
