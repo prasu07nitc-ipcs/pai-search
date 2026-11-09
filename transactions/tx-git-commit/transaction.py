@@ -1,6 +1,5 @@
 """Scoped Git commits and pushes for the common transaction runner."""
 
-from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -79,9 +78,13 @@ def committed_page_ids(parent, commit):
     })
 
 
-def input_paths(value):
-    if not isinstance(value, dict) or value.keys() != {"file_paths"}:
-        raise ValueError('Supply an object with only "file_paths".')
+def validate_input(value):
+    if not isinstance(value, dict) or value.keys() != {"file_paths", "commit_message"}:
+        raise ValueError('Supply an object with "file_paths" and "commit_message".')
+    message = value["commit_message"]
+    if not isinstance(message, str) or not message.strip() or "\0" in message:
+        raise ValueError("commit_message must be a nonblank string without NUL characters.")
+    message.encode("utf-8")
     paths = value["file_paths"]
     if not isinstance(paths, list) or not paths:
         raise ValueError("file_paths must be a nonempty list.")
@@ -94,7 +97,7 @@ def input_paths(value):
         check_paths([os.fsencode(path)])
     if len(paths) != len(set(paths)):
         raise ValueError("file_paths must not contain duplicates.")
-    return paths
+    return paths, message
 
 
 def check_selected_files(paths):
@@ -109,7 +112,7 @@ def check_selected_files(paths):
             raise ValueError(f"Expected a file or a tracked deletion: {name!r}")
 
 
-def run(result, paths):
+def run(result, paths, message):
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     author, email = (config[key] for key in ("author", "email"))
     for value in (author, email):
@@ -189,11 +192,10 @@ def run(result, paths):
     staged = git("--literal-pathspecs", "diff", "--cached", "--name-only",
                  "--no-renames", "-z", "--", *paths)
     if staged:
-        message = datetime.now().strftime("%d-%m-%y")
         git(
             "--literal-pathspecs", "-c", f"user.name={author}", "-c", f"user.email={email}",
             "-c", "commit.gpgSign=false", "commit", "--only", "--author",
-            f"{author} <{email}>", "-m", message, "--", *paths,
+            f"{author} <{email}>", "--cleanup=verbatim", "-m", message, "--", *paths,
         )
         commit = line("rev-parse", branch_ref)
         result["commit"] = commit
@@ -221,10 +223,10 @@ def run(result, paths):
 def execute(value):
     result = {"status": "error", "commit": None, "pushed": False, "page_ids": []}
     try:
-        paths = input_paths(value)
+        paths, message = validate_input(value)
         if shutil.which("git") is None:
             raise ValueError("Git is required.")
-        run(result, paths)
+        run(result, paths, message)
     except subprocess.CalledProcessError as error:
         result["error"] = error.stderr[:1024].decode(errors="replace").strip() or (
             f"Git exited with status {error.returncode}."

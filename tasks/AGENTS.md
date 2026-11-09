@@ -70,35 +70,17 @@ reuse an agent across different component roles.
 
 ## Dispatch and accept
 
-For each ready stage, capture its own dispatch time and launch through its declared
-method. Use direct existing runner commands with safely serialized arguments and
-explicit working directories. Do not invent wrappers or skill CLIs. Dispatch parallel
-members without waiting for an earlier member to finish; collect results independently.
+Launch through the declared method with safely serialized inputs and an explicit
+working directory. Mark each dispatch immediately before launch. Collect results
+as they arrive or wait for completion events for at most 60 seconds at a time.
+A wait timeout leaves the stage active. Batch sibling announcements and artifact
+checks where possible; dispatch newly ready work immediately after settlement.
 
-Keep the critical path event-driven. After dispatch, collect completion immediately
-when available; otherwise use the platform's completion/event wait, bounded to at
-most 60 seconds so progress can still be communicated. Never insert a sleep before
-or between completion waits, alternate sleeps with short polls, or send status
-requests that only ask an active component to finish. Do independent required work
-while a component runs; do not add work merely to fill the wait. A wait timeout is
-not a component failure or permission to repeat execution.
-
-On completion, accept the returned status and required artifacts, settle that stage,
-then dispatch the next ready stage without an intervening wait or unrelated read.
-Batch compatible artifact checks and state updates in one tool call where possible.
-Prepare launch commentary before marking dispatch; place the dispatch mark directly
-before launch. Announce an accepted outcome together with the next launch when useful.
-Do not read a path-only producer's full payload in the orchestrator when its consumer
-owns parsing and semantic validation; check the required file properties instead.
-Read the final reader-facing body once when assembling the report. Retain component
-execution entries from the returned results rather than rereading logs for them.
-
-Acceptance requires successful process/agent completion, successful component status,
-and all contract-required artifact/integrity checks. Exit zero alone is insufficient.
-Keep output paths, required values, errors, partial-effect metadata, and timings in
-memory. Preserve complete transaction output arrays. A valid successful cache hit
-passes; cached failure, duplicate refusal, missing output, correction request, timeout,
-or transport failure does not. Do not repeat semantic validation in the orchestrator.
+Accept only successful process or agent completion, successful component status,
+and all required artifact checks. A valid successful cache hit passes. Check
+path-only outputs for the required file properties and leave payload parsing to
+their consumer. Keep accepted references, complete output arrays, execution
+entries, errors and partial effects in memory.
 
 On first observed failure, stop new dispatch, including queued siblings. Stop or
 reconcile already-active owned work; retain completed outputs and uncertainty without
@@ -115,63 +97,30 @@ the final report described below. Preserve historical task-framework files.
 
 ## Timing and report
 
-Use the shared in-memory [clock utility](clock.mjs) in a persistent JavaScript
-context. Load it before setup and create a new clock for every input, including
-follow-up URLs. Never implement an ad hoc mark/reset helper or replace a clock's
-internal state. The utility is timing support, not a task runtime or log; it has
-no filesystem, component execution, or environment effects.
-
-In the persistent Node REPL, resolve the repository root explicitly and initialize:
+Before setup, create a fresh clock in persistent JavaScript using
+[clock.mjs](clock.mjs) and the recipe's exact stage IDs:
 
 ```javascript
 var taskClockModule = await import(pathToFileURL(repoRoot + '/tasks/clock.mjs').href);
 var taskClock = taskClockModule.createTaskClock(stageIds);
 ```
 
-Import `pathToFileURL` from `node:url`; `stageIds` is the selected recipe's exact
-stage-ID array. Reuse the loaded module while unchanged, but always call the factory
-for the next input. Use methods on the current `taskClock` directly; do not retain
-method aliases, closures over an earlier clock, or a separate mutable marks object.
-Before first dispatch, verify `taskClock.snapshot().preparation` and that all stages
-are `not run`. Keep the same clock object and persistent context through capture.
+Use `pathToFileURL` from `node:url`. Include the module in setup invalidation
+and use a versioned import URL after a change. Before dispatch, verify that
+`snapshot()` shows preparation and all stages as `not run`. Keep the same clock
+throughout the invocation. Call `dispatch(stageId)` just before each launch and
+`settle(stageId, status, cacheReuse)` after acceptance or failure reconciliation.
+Statuses are `succeeded`, `failed`, `cancelled`, and `uncertain`. After assembling
+the report body, call `capture()` once for its timing values. A lost clock or null
+measurement is unavailable.
 
-Call `taskClock.dispatch(stageId)` immediately before each individual launch,
-including parallel siblings. Call `taskClock.settle(stageId, status, cacheReuse)`
-only after acceptance or failure settlement and artifact checks; status is
-`succeeded`, `failed`, `cancelled`, or `uncertain`. Leave unlaunched stages untouched.
-Use `snapshot()` for interim inspection. After reconciliation and report assembly,
-call `capture()` once and retain its returned snapshot for the exact final report.
-Render its UTC wall timestamps in the user's timezone and its monotonic intervals
-in seconds. Null measurements mean unavailable. A lost REPL/clock must be reported
-as unavailable; never instantiate a replacement to reconstruct an ongoing run.
-Include this utility's size and modification time in setup invalidation checks;
-reload changed modules with a versioned import URL before creating the next clock.
-
-Capture each invocation immediately before dispatch
-and after result acceptance, including overhead, cache lookup, and artifact checks.
-Group readiness and component-internal/historical timestamps are not dispatch times.
-Keep measurements in memory; do not reread production logs solely for timing.
-
-Return status, recipe-selected identity and artifact links, and a timeline of every
-stage: component, start, end, monotonic duration, status/cache reuse. Mark unlaunched
-stages as not run and unknown measurements unavailable. Use the user's date/timezone.
-Omit component persisted execution-entry tables from task reports, including skill
-run-log fields. Components still follow their own logging and response contracts;
-retain their execution entries internally for acceptance rather than forwarding them
-in the task's final response. This rule applies to task reports in every session.
-
-Report monotonic intervals: preparation before first dispatch; workflow from first
-dispatch through acceptance/settlement of the last launched component; reporting
-afterward through final timing capture; total preparation-to-capture. Include capture
-time. Never sum overlapping durations. Identify concurrency from actual dispatch,
-not timestamps alone. Explain that full app turn duration can also include subsequent
-response generation/rendering. If no component launches, report preparation and the
-blocking reason; workflow elapsed is unavailable.
-
-Announce actual launches and accepted outcomes concisely, batching sibling updates
-where useful. During waits, use bounded event waits and normal commentary cadence;
-no busy polling, log streaming, or speculative progress. Capture final reporting time
-only after result reconciliation and report assembly.
+Report the outcome, recipe-selected identity and artifacts, and each stage's
+start, end, duration, status and cache reuse. Leave unlaunched stages as
+`not run`. Omit component execution-entry tables. Use the user's timezone and
+report monotonic preparation, workflow, reporting and total intervals in seconds,
+plus capture time and actual parallel dispatch. If nothing launched, report
+preparation and the blocker. The full turn also includes any report persistence
+and response delivery after capture.
 
 ## Final report persistence
 
@@ -193,9 +142,7 @@ tables, and timing values in both; do not add a file-only envelope or append
 component execution entries. Repeated invocations for the same task and page ID
 replace the report file; component cache and duplicate rules remain unchanged.
 
-Final timing capture precedes report persistence and response delivery; explain
-that the full app turn may also include those operations. If report persistence
-fails, report the error and retained component artifacts without claiming that
+If report persistence fails, report the error and retained component artifacts without claiming that
 the report was saved. This report is a user-facing artifact, not a task log,
 checkpoint, or authorization to execute components again.
 

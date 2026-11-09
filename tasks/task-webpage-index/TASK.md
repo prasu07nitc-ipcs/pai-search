@@ -11,12 +11,13 @@ the URL if absent. The validator owns URL extraction and page identity.
 
 ## Setup
 
-Logical context: tasks. Working directory for all runners: repository root.
+Working directory for all runners: repository root.
 Load [tools policy](../../tools/AGENTS.md), [skills policy](../../skills/AGENTS.md),
 [transactions policy](../../transactions/AGENTS.md),
 [tool rules](../../.codex/rules/tools.rules),
 [transaction rules](../../.codex/rules/transactions.rules).
-Read each linked component's instructions; skill SKILL.md links to its AGENTS.md.
+Read linked runner contracts during setup. The context agent reads its own
+skill instructions and returns the compact task response.
 
 Prepare these runner templates; substitute the stage's exact component, complete JSON
 arguments, and timeout before dispatch. POSIX single-quote JSON, replacing each
@@ -44,18 +45,16 @@ skill directory to repository-relative paths. Preserve V.url and V.page_id.
 | article | [tool-webpage-article](../../tools/tool-webpage-article/AGENTS.md) | tool runner / 20s | {"raw_input": Metadata relative to tools/, "markdown_file": Markdown relative to tools/} |
 | context | [skill-webpage-context](../../skills/skill-webpage-context/SKILL.md) | component agent | {"article_file_path": Article} |
 | webpage_index | [tx-webpage-index](../../transactions/tx-webpage-index/AGENTS.md) | transaction runner / 20s | {"context_file_path": Context, "article_file_path": Article} |
-| git_commit | [tx-git-commit](../../transactions/tx-git-commit/AGENTS.md) | Git-specific transaction runner / per-command timeout under component policy | {"file_paths": W} |
+| git_commit | [tx-git-commit](../../transactions/tx-git-commit/AGENTS.md) | Git-specific transaction runner / per-command timeout under component policy | {"file_paths": W, "commit_message": V.page_id} |
 | gc | [tool-webpage-gc](../../tools/tool-webpage-gc/AGENTS.md) | tool runner / 20s | {"page_ids": [V.page_id]} |
 
 Omitted tool options use component defaults. Timeouts bound runner workers, not
 total invocation time. Agent stages have no task-imposed timeout or invented runner.
 
 Use the [Git transaction contract](../../transactions/tx-git-commit/TRANSACTION.md)
-for result acceptance. On an accepted `git_commit` success, run `gc` with
-the page ID retained from validation, including when the Git transaction succeeds
-without creating a commit. If `git_commit` fails, go directly to reporting and
-report GC as failed to run due to the Git failure. The GC timeline status is
-`not run`. Validation has already completed at this point.
+for result acceptance. A successful Git no-op also unlocks cleanup.
+An explicit task rerun bypasses tool caches, including entries for outputs
+removed by cleanup. The context skill retains its page-based cache policy.
 
 ## Groups
 

@@ -345,7 +345,7 @@ def invoke(tool_name, value, *, timeout=20):
     if run_id is not None and (not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None):
         run_id = None
     outputs = output_directory(directory)
-    if outputs is not None:
+    if outputs is not None and not outputs.exists():
         outputs.mkdir(exist_ok=True)
         output_directory(directory)
     identity = next(key for key in ("input_text", "raw_input", "page_id") if key in record_input)

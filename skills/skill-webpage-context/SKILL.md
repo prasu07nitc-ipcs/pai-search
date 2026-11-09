@@ -6,5 +6,4 @@ description: Extract faithful entity context as JSON from a tool-webpage-article
 # Webpage context
 
 Read [AGENTS.md](AGENTS.md) for the input, extraction, and result contracts and
-follow the [shared execution policy](../AGENTS.md). Return the result followed
-by the required persisted execution entry.
+follow the [shared execution policy](../AGENTS.md).

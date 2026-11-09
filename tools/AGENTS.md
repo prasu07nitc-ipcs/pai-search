@@ -50,6 +50,8 @@ failure. Never record a rejected result as success.
 
 Before runner dispatch, callers (agents, tasks and services) reuse successful
 results from the tool's logs/run.log unless the user explicitly requests a rerun.
+Always execute `tool-webpage-gc` when invoked. A prior deletion receipt cannot
+establish whether files exist now.
 Match all default-expanded arguments, including identity, ignoring JSON key order
 but preserving strings and value types. Only the latest successful record for an
 output path is eligible, since later executions may replace that file.

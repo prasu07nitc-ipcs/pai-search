@@ -30,7 +30,7 @@ after staging can leave eligible changes staged. If a commit was created,
 the result reports its ID. Re-run the transaction to retry a push.
 Report unique page IDs from added or modified article and index files in the
 new commit. Query filenames identify queries.
-Use the checkout machine's local date in dd-mm-yy format as the entire
-commit message.
+Require a nonblank UTF-8 string in `commit_message`, without NUL characters.
+Use the supplied message for any new commit.
 Git commands time out individually after 60 seconds. After a timeout, check
 the checkout and remote before retrying because the operation may have completed.

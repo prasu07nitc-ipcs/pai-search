@@ -35,10 +35,7 @@ presentation rules below apply to other skills only. `skill-webpage-context` use
 Preserve the original user input verbatim as `raw_input`. If source and settings
 span messages, join their verbatim text chronologically with two newlines; exclude
 confirmation-only replies. Do not expand defaults or substitute interpreted input.
-For `skill-webpage-context`, validate the article output path and use its filename
-stem as `page_id`, then assign `run_id = page_id`; do not compute an input
-hash. See [Page-based outputs](#page-based-outputs) for lookup and conflict rules.
-Other skills compute `run_id = sha256(raw_input.encode("utf-8")).hexdigest()`:
+Compute `run_id = sha256(raw_input.encode("utf-8")).hexdigest()`:
 lowercase, 64 hexadecimal characters, without whitespace, case, Unicode, or
 newline normalization.
 
@@ -64,8 +61,7 @@ After input validation and required confirmation, inspect the selected skill's
   Do not silently rerun, overwrite, or infer completion. The same active agent
   may finish its own pending persistence with the original record.
 
-Cache identity is skill-local. Page-based cache lookup follows the rules below.
-Other skills use the input hash and compare exact input for reuse. Model, instruction,
+Cache identity is skill-local. Model, instruction,
 or implicit default changes do not invalidate a cached result. Preserve historical
 UUID records unchanged; they are not hash-cache hits. No automatic migration or backfill.
 
@@ -193,7 +189,7 @@ keep writes within the skill. Ordinary file/shell tools may perform persistence.
 Validate the result. Stage raw input and result in temporary UTF-8 files inside
 `input/` and `output/` respectively; flush and fsync both. Acquire an exclusive lock on `logs/run.log`; reread history and recheck
 identity before publishing. If another agent committed the input, discard the
-candidate files and return its valid saved result and displayed entry. Otherwise
+candidate files and respond using the saved result. Otherwise
 atomically publish each of the input and output files,
 then append, flush, and fsync the record before releasing the lock. Disallow
 non-finite JSON numbers. Never rewrite history or overwrite a committed result.
@@ -204,13 +200,16 @@ An identical existing record means a persistence retry succeeded; conflicting
 records are errors. On input or output failure, append nothing. On log failure, retain
 input and output and retry with the original record/ID. If storage remains unavailable,
 report the failure and saved location without claiming success; storage/cache
-errors are exceptions to the normal response. Otherwise return the skill's
-prescribed result followed by the Markdown execution entry below, except for
-`skill-webpage-search`, which omits the displayed entry. Keep the saved
-result file in its original format, without the displayed entry or extra fields.
+errors are exceptions to the normal response. Otherwise follow the response rules
+below. Keep the saved result in the skill's prescribed format.
 Keep intermediate reasoning and logging operations internal.
 
 ### Displayed execution entry
+
+For task dispatch, return only the saved output path, persisted execution record
+as compact JSON, and whether it was reused. For an error without a record, return
+its code and message. The task consumes the output by path and owns presentation.
+The display rules below apply to direct invocations.
 
 Except for `skill-webpage-search`, after a finished execution or cache hit, show the corresponding persisted
 `logs/run.log` entry as a Markdown table with `Field` and `Value` columns. This is

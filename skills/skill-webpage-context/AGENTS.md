@@ -81,5 +81,4 @@ Persist successful results, including `[]`, as `output/<page_id>.json` with
 `output_format: json`, `status: completed`, and `meta_data.page_id`. Handled
 execution failures use concise plain text in `output/<page_id>.error.txt`,
 `output_format: text`, `status: failed`, and nonempty error `code` and `message`.
-Return the result followed by the shared persisted execution-entry table, omitting
-input fields and input links. Keep the table out of the saved result.
+Use the [shared response rules](../AGENTS.md#displayed-execution-entry).

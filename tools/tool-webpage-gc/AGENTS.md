@@ -24,4 +24,5 @@ write fails. Retained history may reference deleted files. Regenerating those
 files requires an explicit rerun under the shared cache policy.
 
 Runner logs are `logs/run.log` and `logs/runner.log`. Follow the
-[shared logging and cache policy](../AGENTS.md#production-logging).
+[shared logging policy](../AGENTS.md#production-logging), including its
+cleanup cache exception.
