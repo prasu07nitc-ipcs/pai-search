@@ -22,3 +22,23 @@ prefix_rule(
         "transactions/.venv/bin/python -B transactions/tx-webpage-index/transaction.py",
     ],
 )
+
+prefix_rule(
+    pattern = [
+        "transactions/.venv/bin/python",
+        "-B",
+        "transactions/runner.py",
+        "--transaction",
+        "tx-git-commit",
+        "--input",
+    ],
+    decision = "allow",
+    justification = "Allow the scoped Git transaction to connect to its configured remote",
+    match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{\"message\":\"Update generated data\"}'",
+    ],
+    not_match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --worker",
+        "git push",
+    ],
+)
