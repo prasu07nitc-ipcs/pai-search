@@ -255,12 +255,11 @@ def skill_cleanup_targets(file_paths):
         raise ValueError("file_paths must be a nonempty list.")
     targets = []
     for path in dict.fromkeys(file_paths):
-        if re.fullmatch(r"skills/skill-[a-z0-9]+(?:-[a-z0-9]+)*/output/[^/\\\x00]+", path) is None:
-            raise ValueError("Expected a repository-relative skill output file path.")
-        target = ROOT.parent / path
-        if target.name in (".", ".."):
-            raise ValueError("Traversal is forbidden in skill output paths.")
-        targets.append(target)
+        if re.fullmatch(r"skills/skill-[a-z0-9]+(?:-[a-z0-9]+)*/(?:input|output)/[^/\\\x00]+", path) is None:
+            raise ValueError("Expected a repository-relative skill input or output file path.")
+        if path.rsplit("/", 1)[-1] in (".", ".."):
+            raise ValueError("Traversal is forbidden in skill cleanup paths.")
+        targets.append(ROOT.parent / path)
     return targets
 
 

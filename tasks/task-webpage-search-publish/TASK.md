@@ -34,10 +34,11 @@ order. Verify each path is an existing repository-relative Markdown file directl
 under `data/queries/` with a 64-character lowercase hexadecimal filename stem. `M` is the literal prefix `seach-queries-` followed by the
 formatted invocation date.
 
-`S` is the list of source output paths for Q. In Q order, take each query
+`S` is the list of source output and input paths for Q. In Q order, take each query
 filename stem as the search run ID and append these repository-relative paths
 in order: `skills/skill-webpage-search/output/<run_id>.md` and
-`skills/skill-webpage-search/output/<run_id>.txt`. The cleanup tool skips
+`skills/skill-webpage-search/output/<run_id>.txt`, then
+`skills/skill-webpage-search/input/<run_id>.txt`. The cleanup tool skips
 missing paths. Use Q for query identity because the Git result's `page_ids`
 field covers articles and indexes.
 

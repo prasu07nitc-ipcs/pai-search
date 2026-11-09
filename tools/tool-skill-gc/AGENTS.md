@@ -1,14 +1,15 @@
-# Skill output cleanup
+# Skill file cleanup
 
 Supply `file_paths` as a nonempty JSON array of repository-relative strings.
-Each path must be directly under `skills/skill-<name>/output/`. For example,
+Each path must be directly under `skills/skill-<name>/input/` or
+`skills/skill-<name>/output/`. For example,
 `{"file_paths":["skills/skill-webpage-search/output/report.md"]}`.
-Reject traversal, absolute paths, and paths outside skill output directories
+Reject traversal, absolute paths, and paths outside skill input and output directories
 before deletion. Process duplicate paths once, in input order.
 
 An invocation requests deletion of the listed regular, singly linked files.
-Skip missing files, directories, and aliases. Preserve skill definitions, inputs,
-and logs. The runner grants unlink-only access to the exact validated paths.
+Skip missing files, directories, and aliases. Preserve skill definitions and logs.
+The runner grants unlink-only access to the exact validated paths.
 Use the shared macOS runner from the repository root with its default timeout.
 
 The result uses the first path as `input.raw_input`. The receipt ID is the

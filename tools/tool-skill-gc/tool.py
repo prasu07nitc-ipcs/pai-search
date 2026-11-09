@@ -1,4 +1,4 @@
-"""Delete explicitly selected files from skill output directories."""
+"""Delete explicitly selected files from skill input and output directories."""
 import json
 import os
 import stat
@@ -9,7 +9,7 @@ from runner import ROOT, skill_cleanup_targets
 
 
 def collect_outputs(file_paths: list[str]) -> dict:
-    """Remove the selected skill outputs and save a cleanup receipt."""
+    """Remove the selected skill files and save a cleanup receipt."""
     targets = skill_cleanup_targets(file_paths)
     receipt_id = os.environ["PROJECT_TOOL_RUN_ID"]
     metadata = {"page_id": receipt_id, "deleted": []}

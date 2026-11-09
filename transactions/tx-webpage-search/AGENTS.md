@@ -5,7 +5,7 @@ with the empty JSON object `{}`. Discover reports directly in
 `skills/skill-webpage-search/output/`, without recursing.
 
 Select filenames with a 64-character lowercase SHA-256 run ID and an `.md`
-or legacy `.txt` suffix. Ignore other names. Skip any run whose destination
+suffix. Ignore other names. Skip any run whose destination
 already exists. Require each remaining report to
 be a regular, unlinked UTF-8 file with nonempty Query, Response, Index Files
 Analysed, Execution time, and Query ID sections in that order. Accept a trailing
