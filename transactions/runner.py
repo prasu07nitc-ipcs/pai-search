@@ -564,11 +564,26 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--input", help="JSON object of named arguments; use - to read UTF-8 JSON from stdin")
     parser.add_argument("--verbose", action="store_true", help="Record per-function diagnostic timings")
-    parser.add_argument("--timeout", type=float, default=20, help="Worker timeout in seconds (0 < timeout <= 300)")
+    parser.add_argument("--timeout", type=float, help="Worker timeout in seconds (0 < timeout <= 300)")
     parser.add_argument("--rerun", action="store_true", help="Confirm rerunning an already executed production input")
     args = parser.parse_args()
     verify_environment()
+    if args.transaction == "tx-git-commit":
+        if args.worker or args.verbose or args.rerun or args.timeout is not None:
+            parser.error("tx-git-commit accepts only --transaction and --input")
+        if not args.input or args.input == "-":
+            parser.error("Supply inline --input JSON for tx-git-commit")
+        try:
+            value = json.loads(args.input)
+        except ValueError as exc:
+            parser.error(str(exc))
+        module = load_module(ROOT / "tx-git-commit" / "transaction.py", "tx_git_commit")
+        result = module.execute(value)
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        return 0 if result["status"] == "ok" else 1
     directory, _ = resolve_transaction(args.transaction)
+    if args.timeout is None:
+        args.timeout = 20
     if not math.isfinite(args.timeout) or not 0 < args.timeout <= 300:
         parser.error("--timeout must be greater than zero and at most 300 seconds")
     if args.rerun and (args.worker or args.input is None):
@@ -607,4 +622,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

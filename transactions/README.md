@@ -30,3 +30,8 @@ transactions/.venv/bin/python -B -m unittest discover -s transactions -p 'test_*
 On macOS, add `TRANSACTION_SANDBOX_TEST=1` to that command to test real sandboxed
 runners in a disposable project, outside any enclosing sandbox. This does not execute
 production inputs or modify persisted data.
+
+## Git transaction
+
+See the [tx-git-commit contract](tx-git-commit/TRANSACTION.md)
+for its entry point and result.
