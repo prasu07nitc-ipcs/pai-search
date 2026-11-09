@@ -5,6 +5,7 @@ import argparse
 import ast
 import contextlib
 import inspect
+import hashlib
 import math
 import re
 import types
@@ -248,6 +249,21 @@ def cleanup_targets(page_id):
                 yield output / f"{page_id}.{extension}"
 
 
+def skill_cleanup_targets(file_paths):
+    """Validate the complete batch before granting any unlink capability."""
+    if not file_paths:
+        raise ValueError("file_paths must be a nonempty list.")
+    targets = []
+    for path in dict.fromkeys(file_paths):
+        if re.fullmatch(r"skills/skill-[a-z0-9]+(?:-[a-z0-9]+)*/output/[^/\\\x00]+", path) is None:
+            raise ValueError("Expected a repository-relative skill output file path.")
+        target = ROOT.parent / path
+        if target.name in (".", ".."):
+            raise ValueError("Traversal is forbidden in skill output paths.")
+        targets.append(target)
+    return targets
+
+
 @log_execution
 def worker(tool_name, value, run_id=None):
     verify_environment()
@@ -279,6 +295,10 @@ def worker(tool_name, value, run_id=None):
     if tool_name == "tool-webpage-gc":
         for page_id in dict.fromkeys(value["page_ids"]):
             for target in cleanup_targets(page_id):
+                rules.append('(allow file-write-unlink (literal ' + json.dumps(str(target)) + '))')
+    if tool_name == "tool-skill-gc":
+        for target in skill_cleanup_targets(value["file_paths"]):
+            if target.parent.resolve() == target.parent and not target.is_symlink():
                 rules.append('(allow file-write-unlink (literal ' + json.dumps(str(target)) + '))')
     profile = ''.join(rules).encode('utf-8')
     if library.sandbox_init(profile, 0, ctypes.byref(error)) != 0:
@@ -340,8 +360,13 @@ def invoke(tool_name, value, *, timeout=20):
                        for page_id in page_ids)):
             raise ValueError("page_ids must be a nonempty list of lowercase SHA-256 page IDs.")
         record_input = {**value, "page_id": page_ids[0]}
+    if tool_name == "tool-skill-gc":
+        skill_cleanup_targets(value["file_paths"])
+        record_input = {**value, "raw_input": value["file_paths"][0]}
     logs_directory(directory)
     run_id = record_input.get("page_id")
+    if tool_name == "tool-skill-gc":
+        run_id = hashlib.sha256(json.dumps(value["file_paths"], separators=(",", ":")).encode("utf-8")).hexdigest()
     if run_id is not None and (not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{64}", run_id) is None):
         run_id = None
     outputs = output_directory(directory)

@@ -21,7 +21,7 @@ This project manages and executes custom user-defined tools. A tool is a Python 
 - Keep the detailed purpose, input and output contracts, validation, execution rules, required configuration, dependencies, permissions, and side effects in the tool's `AGENTS.md`.
 - Implement the capability as a Python function in `tool.py`, with explicit typed parameters, documented constraints and defaults, and a structured result serializable to JSON. Define expected errors and failure behavior.
 - Every result is a JSON object with exactly `input`, `output`, `output_format`, `status`, `error`, and `meta_data`.
-- `input` contains exactly the required identity string and `processed_input` (arguments with defaults applied, excluding that identity). The identity is `input_text` for `tool-webpage-validator`, `page_id` for the two webpage tools, and `raw_input` for other tools. Preserve it unchanged. Webpage cleanup accepts a list of page IDs and uses its first ID as the result and log identity. Interpretation belongs to the caller.
+- `input` contains exactly the required identity string and `processed_input` (arguments with defaults applied, excluding that identity). The identity is `input_text` for `tool-webpage-validator`, `page_id` for the two webpage tools, and `raw_input` for other tools. Preserve it unchanged. Webpage cleanup accepts a list of page IDs and uses its first ID as the result and log identity. Skill cleanup accepts a list of file paths and uses its first path as `raw_input`. Interpretation belongs to the caller.
 - `status` is `ok` or `error`. Success requires `error: null` and `output` equal to the selected tool's `tool-<name>/output/<page_id>.json` or `.md` path, relative to `tools/`. Failure requires `output: null` and `error` containing exactly nonempty string `code` and `message` fields. `output_format` is `json` or `markdown`, including on failure; `meta_data` is an object.
 - Successful results expose the validated `page_id` in `input` or `meta_data`. Atomically replace the corresponding payload on success; preserve previous payloads on failure where possible. Different IDs retain separate files; concurrent writes to one ID use last replacement wins. The runner enforces the envelope; each tool owns its saved payload and metadata contract.
 
@@ -50,7 +50,7 @@ failure. Never record a rejected result as success.
 
 Before runner dispatch, callers (agents, tasks and services) reuse successful
 results from the tool's logs/run.log unless the user explicitly requests a rerun.
-Always execute `tool-webpage-gc` when invoked. A prior deletion receipt cannot
+Always execute `tool-webpage-gc` and `tool-skill-gc` when invoked. A prior deletion receipt cannot
 establish whether files exist now.
 Match all default-expanded arguments, including identity, ignoring JSON key order
 but preserving strings and value types. Only the latest successful record for an
@@ -75,7 +75,7 @@ or timeout. Keep timing out of result records and stdout. Workers cannot write l
 Each tool's instructions must identify both logs and link to this section rather
 than repeat the schema.
 
-For new records, `run_id` equals `page_id`; never hash the supplied input object.
+For new records, `run_id` equals `page_id`. Skill cleanup uses the SHA-256 of its compact JSON path array as the receipt ID in `meta_data.page_id` and as `run_id`.
 For tools accepting a well-formed `page_id`, use it before dispatch (even if the
 tool later rejects its URL match). For URL validation, obtain it from the accepted
 result's `meta_data.page_id`. Until available, including failures before extraction,
@@ -123,7 +123,7 @@ than repeat the shared logging specification.
 - The `output/` directory must be a real directory, never a symlink. Derive its location from the selected tool directory, not the incidental working directory or a caller-selected output directory. The parent runner may create this directory when required for an authorized invocation and must validate it before granting worker write access.
 - Reject symlinks within `output/` and output paths containing traversal outside it. File access must not escape through symlinks, other filesystem aliases, or directory replacement. Enforce the write boundary through OS sandboxing or permissions, not path-string checks alone.
 - Apart from the cleanup permission below, workers must not write elsewhere, including their tool root outside `output/`, other tools' directories, runtime or system locations, temporary directories, environment files, or runner-owned logs. Tool definitions and instructions remain protected from worker writes. Subprocess restrictions remain in force.
-- For an authorized deletion run, the runner may grant `tool-webpage-gc` unlink-only access to the exact `<page_id>.json` and `<page_id>.md` paths directly under other tools' real `output/` directories. Cleanup may remove only regular, unaliased files.
+- For an authorized deletion run, the runner may grant `tool-webpage-gc` unlink-only access to the exact `<page_id>.json` and `<page_id>.md` paths directly under other tools' real `output/` directories. For authorized skill cleanup, the runner may grant `tool-skill-gc` unlink-only access to explicitly supplied files directly under `skills/skill-*/output/`. Cleanup may remove only regular, unaliased files.
 - All tool workers may read files under the repository root and its subdirectories, including other tools' outputs. They may also read the interpreter, installed dependencies, and system resources required for execution. Repository symlinks do not extend read access beyond those permitted locations. Read access does not grant write access.
 - Tool-specific input paths and data contracts still apply. The repository Git policy still governs Git operations.
 - Tool instructions must document output-file behavior, returned paths, and applicable side effects. File permissions do not authorize environment management.

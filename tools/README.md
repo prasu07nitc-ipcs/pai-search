@@ -12,6 +12,7 @@ runner owns validation, deadlines, and logs; each tool owns its domain contract.
 - [Article assembly](tool-webpage-article/TOOL.md): matching metadata and Markdown → article
 
 - [Webpage output cleanup](tool-webpage-gc/TOOL.md) deletes outputs for a list of page IDs across other tools.
+- [Skill output cleanup](tool-skill-gc/TOOL.md) deletes explicitly listed files from skill output directories.
 
 Read the selected tool's instructions before invoking it. Commands start in the
 repository root containing `tools/`. Use the existing `tools/.venv` environment;
