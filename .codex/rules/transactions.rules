@@ -1,0 +1,44 @@
+# Run from the pai-search repository root using this exact argument order.
+# Prefix matching also permits trailing runner arguments.
+prefix_rule(
+    pattern = [
+        "transactions/.venv/bin/python",
+        "-B",
+        "transactions/runner.py",
+        "--transaction",
+        ["tx-webpage-index", "tx-webpage-search"],
+    ],
+    decision = "allow",
+    justification = "Launch approved project transactions through their dedicated sandboxing runner",
+    match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-webpage-index",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-webpage-index --input '{}'",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-webpage-search --input '{}'",
+    ],
+    not_match = [
+        "transactions/.venv/bin/python -m pip install example",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-unknown",
+        "transactions/.venv/bin/python -B transactions/runner.py --worker",
+        "transactions/.venv/bin/python -B transactions/tx-webpage-index/transaction.py",
+    ],
+)
+
+prefix_rule(
+    pattern = [
+        "transactions/.venv/bin/python",
+        "-B",
+        "transactions/runner.py",
+        "--transaction",
+        "tx-git-commit",
+        "--input",
+    ],
+    decision = "allow",
+    justification = "Allow the scoped Git transaction to connect to its configured remote",
+    match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{\"file_paths\":[\"data/queries/example.md\"]}'",
+    ],
+    not_match = [
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --worker",
+        "git push",
+    ],
+)
