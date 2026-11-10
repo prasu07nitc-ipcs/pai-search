@@ -22,6 +22,71 @@ indexed. Answers cite the source articles.
 Export saved search reports as Markdown under `data/queries/`. The publish task
 commits and pushes those files to the remote repository.
 
+## Project Setup
+
+### System requirements
+
+- PAI Search currently supports **macOS only**. Its tool and transaction
+  runners use the macOS `sandbox_init` API.
+- Use a Mac that meets the requirements for the ChatGPT desktop app.
+  [OpenAI desktop app documentation](https://learn.chatgpt.com/docs/app)
+- Use a local folder where you can write files. Internet access is needed to
+  sign in to Codex, install Python packages, and fetch public webpages.
+
+### ChatGPT account and plan
+
+Sign in with a ChatGPT account. The Free plan can run Codex in the desktop app
+where access has rolled out. Paid plans offer different usage limits and model
+access. [Current Codex plans and limits](https://learn.chatgpt.com/docs/pricing)
+
+### Install the desktop app on macOS
+
+1. Download the macOS installer.
+   [Official ChatGPT desktop app download](https://learn.chatgpt.com/docs/app)
+2. Open the downloaded disk image and drag ChatGPT into **Applications**.
+3. Open ChatGPT, sign in, and select **Codex** in the desktop app.
+
+### Install system tools and get the project
+
+1. Download the macOS installer for Python 3.11 or newer from
+   [python.org](https://www.python.org/downloads/macos/). Open the downloaded
+   `.pkg` and follow the installer prompts.
+2. Run `git --version` if you need to clone the repository or publish results.
+   If Git is unavailable, run `xcode-select --install` in Terminal and follow
+   the prompts to install Apple's Command Line Tools.
+3. Clone the repository to a local folder, or use your existing checkout.
+   For publishing, use a checkout with a configured remote and credentials
+   that allow pushes to it.
+
+### Set up the project environments
+
+Open the repository root, the folder containing this README, as a local
+project in Codex. Use a checkout on a branch other than `main` for this
+project-wide setup. Start a project chat and paste the prompt below so Codex
+runs the environment setup from the repository root.
+
+```text
+Set up PAI Search from the repository root and follow AGENTS.md.
+
+1. Run uname -s and confirm it returns Darwin. Run python3.11 --version.
+   If Python 3.11 is unavailable, find a newer installed Python and verify
+   its version. Use that executable in place of python3.11 below.
+2. Create each missing environment using its corresponding command.
+   python3.11 -m venv tools/.venv
+   python3.11 -m venv transactions/.venv
+   Reuse existing compatible environments. Report incompatible ones.
+3. Install any missing extraction dependencies in the tools environment.
+   tools/.venv/bin/python -m pip install 'trafilatura>=2.0,<3.0' lxml_html_clean
+   Use only the standard library for transaction code.
+4. Verify package consistency and check that both runner CLIs load.
+   tools/.venv/bin/python -m pip check
+   tools/.venv/bin/python -B tools/runner.py --help
+   transactions/.venv/bin/python -B transactions/runner.py --help
+5. Report the Python version, verification results, and any blockers.
+```
+
+After Codex verifies both environments, use the starter messages below.
+
 ## How to Run/Execute the Use Cases
 
 Open a project chat from the repository root and send the starter message for
