@@ -139,8 +139,9 @@ report and capturing final timings, atomically replace the file using a temporar
 UTF-8 file in the same directory, flush/fsync it, then verify the saved text equals
 the final response before sending that response. Include identical content, links,
 tables, and timing values in both; do not add a file-only envelope or append
-component execution entries. Repeated invocations for the same task and page ID
-replace the report file; component cache and duplicate rules remain unchanged.
+component execution entries. For repeated invocations, follow the policy in the
+selected task's TASK.md. If it defines no repeated-invocation policy, abort with
+an error as soon as the repeat is identified.
 
 If report persistence fails, report the error and retained component artifacts without claiming that
 the report was saved. This report is a user-facing artifact, not a task log,

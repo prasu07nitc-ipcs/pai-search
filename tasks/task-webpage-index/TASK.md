@@ -9,6 +9,16 @@ Supply a URL or text containing one. Pass the input body unchanged when explicit
 separated from the command; otherwise pass the complete triggering message. Ask for
 the URL if absent. The validator owns URL extraction and page identity.
 
+## Reinvocation
+
+For a repeated invocation, after accepting the validator result and before
+dispatching the Extract group, check only `data/articles/*/<page_id>.md`
+using the validator's page ID. Enumerate the immediate subdirectories of
+`data/articles/` directly from the filesystem and test for the exact filename
+in each, including paths matched by Git or other ignore rules. If a matching
+article file exists, abort with an error that identifies the existing file.
+Otherwise, continue with the remaining stages.
+
 ## Setup
 
 Working directory for all runners: repository root.
