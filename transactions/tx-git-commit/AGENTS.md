@@ -1,36 +1,29 @@
 # tx-git-commit
 
-The [repository Git policy](../../AGENTS.md) authorizes this transaction.
-Use the common transaction runner and existing virtual environment from
-the root of the target checkout. It requires Python 3.11+ and Git.
-It may read all of data/. Git commits and outgoing
-history may touch only data/articles/, data/index/, and data/queries/.
+Follow the [repository Git policy](../../AGENTS.md) and the
+[transaction contract](TRANSACTION.md). Use the Git-specific path in the common
+runner and the existing transaction virtual environment from the repository root.
+Git commands time out individually after 60 seconds.
 
-Use the checked-out branch and
-the same branch name on the remote. Use the branch's configured remote when
-available, otherwise origin or the sole remote. Detached HEAD and a missing
-repository or remote fail validation.
-Stop before contacting the remote if Git reports any staged, unstaged, or
-untracked path outside the three allowed directories. Recheck before staging.
-Git-ignored untracked files are excluded from this check.
-Require an explicit nonempty list of unique repository-relative file paths.
-Reject directories, symlinked paths, traversal, and missing untracked files.
-Treat paths literally. Stage and commit only the selected paths, including
-selected ignored files and tracked deletions. Preserve other staged changes.
-Use a full checkout with an existing local commit so the runner can validate
-outgoing history.
-An existing remote branch must be an ancestor of local HEAD. For a new remote
-branch, history reachable from other advertised remote branches is excluded
-from the scope check. On an empty remote, the check covers the entire local history.
-The push requires the remote branch to still match the observed tip.
+Resolve the paired `data-<branch>` from the checked-out working branch. Use the
+working branch's configured remote, otherwise origin or the sole remote. Resolve
+a single push destination and use that destination for inspection and pushes.
+Require a full checkout and a named working branch. Use the first commit on the
+remote main branch's first-parent history as the seed.
 
-Use git-config.json for the commit identity. Do not switch branches or run
-concurrent Git operations in the same checkout during execution. An error
-after staging can leave eligible changes staged. If a commit was created,
-the result reports its ID. Re-run the transaction to retry a push.
-Report unique page IDs from added or modified article and index files in the
-new commit. Query filenames identify queries.
-Require a nonblank UTF-8 string in `commit_message`, without NUL characters.
-Use the supplied message for any new commit.
-Git commands time out individually after 60 seconds. After a timeout, check
-the checkout and remote before retrying because the operation may have completed.
+Require an existing local paired branch and reject it if checked out in another
+worktree. Use a private index, preserve the working checkout and its index, and
+use git-config.json for commit identity. If the seed contains non-data files,
+verify that the first paired-branch commit is its direct child and removes only
+those inherited files.
+
+Require an explicit caller-supplied `file_paths` list. The permitted directories
+are `data/articles/`, `data/index/`, and `data/queries/`. Commit only supplied
+files. Reject outgoing commits that touch any unlisted path after the verified
+remote tip or, for the first push, after the verified branch baseline.
+
+Validate selected paths and every outgoing commit after the remote tip or, for
+a new remote branch, after the verified setup baseline. Reject remote divergence. Commit only supplied file content and update the
+local paired ref with its expected previous value. Push with a lease against
+the observed remote tip and verify the advertised tip after publication.
+A failed push may leave a local commit. Retry with a list covering all paths touched by pending commits.

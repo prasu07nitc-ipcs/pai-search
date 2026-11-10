@@ -117,8 +117,7 @@ Add https://example.com/article to my personal index.
 > chat indexes their URLs one at a time in the order you sent them.**
 
 The [indexing task](tasks/task-webpage-index/TASK.md) saves the article under
-`data/articles/` and its entity indexes under `data/index/`. With authorization,
-the task commits those files and pushes the commit to the remote Git repository.
+`data/articles/` and its entity indexes under `data/index/`. Use the Index choice in the Publish chat to publish those files.
 
 ### Search the personal index
 
@@ -156,23 +155,23 @@ The skill also saves a Markdown search report for later publishing.
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to tasks sub-project and load task-webpage-search-publish. Rename the chat thread as **Publish**.
+> set the context to tasks sub-project and load task-webpage-publish. Rename the chat thread as **Publish**.
 
 The starter message loads the publishing task instructions. Rename the chat to
-**Publish chat** and reuse it whenever you want to publish saved search reports.
+**Publish** and reuse it to publish saved search reports or webpage indices.
 To run the task, send the following message.
 
 ```text
-task-webpage-search-publish
+task-webpage-publish
 ```
 
 > [!NOTE]
-> **Run a search in Search chat first so there’s a saved report to publish.**
+> **Prepare content in the Search or Index chat before publishing it.**
 
-The [publish task](tasks/task-webpage-search-publish/TASK.md) exports saved search
-reports as Markdown files under `data/queries/`, commits those files, and pushes
-the commit to the remote Git repository. After a successful Git step, it cleans
-up the corresponding local search inputs and outputs. The task reports which
-files it exported, the push status, and the cleanup outcome.
-
-
+The [publish task](tasks/task-webpage-publish/TASK.md) ends its turn with a
+prompt. Select **Search**, **Index**, or **Skip** in the control, or send the
+choice as your next chat message. Skip
+cancels the invocation. Search exports saved reports to `data/queries/`. Index
+uses locally saved articles and entity index files. The task commits and pushes
+the selected files to the working branch's existing paired `data-<branch>` and
+cleans up corresponding source artifacts after remote verification.

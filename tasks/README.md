@@ -3,7 +3,7 @@
 | Recipe | Input | Saved outputs |
 | --- | --- | --- |
 | [task-webpage-index](task-webpage-index/TASK.md) | URL or text containing one | Saved article and per-entity Markdown indexes |
-| [task-webpage-search-publish](task-webpage-search-publish/TASK.md) | None | Exported query reports committed and pushed |
+| [task-webpage-publish](task-webpage-publish/TASK.md) | Follow-up chat reply of Search, Index, or Skip | Selected query or webpage index files published to the paired data branch |
 
 Run `task-webpage-index: https://example.com/article`.
 Components own their input resolution, user interaction, and authorization.

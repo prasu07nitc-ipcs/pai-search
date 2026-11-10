@@ -36,7 +36,6 @@ apostrophe with `'"'"'`. No shell interpolation or temporary input files.
 ```sh
 tools/.venv/bin/python -B tools/runner.py --tool <component> --input '<JSON>' --timeout <seconds>
 transactions/.venv/bin/python -B transactions/runner.py --transaction <component> --input '<JSON>' --timeout <seconds>
-transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '<JSON>'
 ```
 
 ## Stages
@@ -55,19 +54,11 @@ skill directory to repository-relative paths. Preserve V.url and V.page_id.
 | article | [tool-webpage-article](../../tools/tool-webpage-article/AGENTS.md) | tool runner / 20s | {"raw_input": Metadata relative to tools/, "markdown_file": Markdown relative to tools/} |
 | context | [skill-webpage-context](../../skills/skill-webpage-context/SKILL.md) | component agent | {"article_file_path": Article} |
 | webpage_index | [tx-webpage-index](../../transactions/tx-webpage-index/AGENTS.md) | transaction runner / 20s | {"context_file_path": Context, "article_file_path": Article} |
-| git_commit | [tx-git-commit](../../transactions/tx-git-commit/AGENTS.md) | Git-specific transaction runner / per-command timeout under component policy | {"file_paths": W, "commit_message": V.page_id} |
-| gc | [tool-webpage-gc](../../tools/tool-webpage-gc/AGENTS.md) | tool runner / 20s | {"page_ids": [V.page_id]} |
-| skill_gc | [tool-skill-gc](../../tools/tool-skill-gc/AGENTS.md) | tool runner / 20s | {"file_paths": [Context]} |
 
 Omitted tool options use component defaults. Timeouts bound runner workers, not
 total invocation time. Agent stages have no task-imposed timeout or invented runner.
 
-Use the [Git transaction contract](../../transactions/tx-git-commit/TRANSACTION.md)
-for result acceptance. A successful Git no-op also unlocks cleanup.
-Skill cleanup targets only the accepted context output for this invocation,
-including a legacy output if that was the accepted path.
-An explicit task rerun bypasses tool caches, including entries for outputs
-removed by cleanup. The context skill retains its page-based cache policy.
+An explicit task rerun bypasses tool caches. The context skill retains its page-based cache policy.
 
 ## Groups
 
@@ -77,14 +68,11 @@ removed by cleanup. The context skill retains its page-based cache policy.
 | Extract | markdown, metadata | parallel | 2 |
 | Generate | article, context | serial | 1 |
 | Save | webpage_index | serial | 1 |
-| Commit | git_commit | serial | 1 |
-| Clean up | gc, skill_gc | parallel | 2 |
 
 ## Result
 
 Report V.page_id and link the saved article and entity index files from W.
 The article is the first path in W, followed by any entity index files. Report
-the number of entity files. Link Context if it is still available, or report its
-deletion if confirmed by the skill cleanup receipt. Use the shared timing,
-failure reporting, and report persistence rules.
-Report the commit ID, push status, and both cleanup outcomes when available.
+the number of entity files and link Context. Use the shared timing, failure
+reporting, and report persistence rules. The saved files are ready for the
+Index branch of [task-webpage-publish](../task-webpage-publish/TASK.md).
