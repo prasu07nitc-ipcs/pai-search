@@ -1,0 +1,26 @@
+# Run from the pai-search repository root using this exact argument order.
+# Prefix matching also permits trailing runner arguments.
+prefix_rule(
+    pattern = [
+        "tools/.venv/bin/python",
+        "-B",
+        "tools/runner.py",
+        "--tool",
+        ["tool-webpage-validator", "tool-webpage-metadata", "tool-webpage-markdown", "tool-webpage-article", "tool-webpage-gc", "tool-skill-gc"],
+    ],
+    decision = "allow",
+    justification = "Launch approved project tools through their dedicated sandboxing runner",
+    match = [
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-validator",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-metadata",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-markdown",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-article",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-webpage-gc",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-skill-gc",
+    ],
+    not_match = [
+        "tools/.venv/bin/python -m pip install example",
+        "tools/.venv/bin/python -B tools/runner.py --tool tool-unknown",
+        "tools/.venv/bin/python -B tools/runner.py --worker",
+    ],
+)
