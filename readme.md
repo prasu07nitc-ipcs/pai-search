@@ -81,7 +81,11 @@ Set up PAI Search from the repository root and follow AGENTS.md.
    tools/.venv/bin/python -m pip check
    tools/.venv/bin/python -B tools/runner.py --help
    transactions/.venv/bin/python -B transactions/runner.py --help
-5. Report the Python version, verification results, and blockers.
+5. If this checkout will be used for publishing, check the paired data branch.
+   transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{"check_only":true}'
+   If the remote branch is missing, tell me its name and remote so I can create
+   it manually. Report remote access errors separately.
+6. Report the Python version, verification results, and blockers.
 ```
 
 After Codex verifies both environments, use the starter messages below.
@@ -155,7 +159,7 @@ The skill also saves a Markdown search report for later publishing.
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to tasks sub-project and load task-webpage-publish. Rename the chat thread as **Publish**.
+> set the context to tasks sub-project and load task-webpage-publish. Run its read-only paired data branch check and report whether Publish is ready. Rename the chat thread as **Publish**.
 
 The starter message loads the publishing task instructions. Rename the chat to
 **Publish** and reuse it to publish saved search reports or webpage indices.

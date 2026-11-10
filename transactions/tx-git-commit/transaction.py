@@ -78,16 +78,7 @@ def check_selected_files(paths):
             raise ValueError(f"Expected a regular, unaliased file: {name!r}")
 
 
-def run(result, paths, message):
-    config = json.loads(CONFIG.read_text(encoding="utf-8"))
-    author, email = (config[key] for key in ("author", "email"))
-    for value in (author, email):
-        if not isinstance(value, str) or not value.strip() or any(
-            character in value for character in "\r\n\0<>"
-        ):
-            raise ValueError("Invalid Git identity in git-config.json.")
-    identity = ("-c", f"user.name={author}", "-c", f"user.email={email}")
-
+def run(result, paths, message, *, check_only=False):
     if Path(line("rev-parse", "--show-toplevel")).resolve() != PROJECT:
         raise ValueError("Run from the root of the target repository.")
     source_ref = line("symbolic-ref", "HEAD")
@@ -99,10 +90,6 @@ def run(result, paths, message):
     local = line("for-each-ref", "--format=%(objectname) %(refname)", branch_ref)
     previous = next((oid for oid, ref in (entry.split(" ", 1)
                      for entry in local.splitlines()) if ref == branch_ref), "")
-    if not previous:
-        raise ValueError(f"Missing paired data branch {branch!r}. Run paired branch setup first.")
-    check_selected_files(paths)
-
     remotes = line("remote").splitlines()
     if not remotes:
         raise ValueError("The repository has no configured remote.")
@@ -128,6 +115,27 @@ def run(result, paths, message):
         entry.split("\t", 1) for entry in advertised.splitlines()
     )}
     tip = heads.get(branch_ref, "")
+    if check_only:
+        result.update(branch=branch, remote=remote, local_branch_exists=bool(previous),
+                      remote_branch_exists=bool(tip))
+    if not tip:
+        raise ValueError(f"Missing paired data branch {branch!r} on remote {remote!r}. "
+                         "Create it manually before publishing.")
+    if not previous:
+        raise ValueError(f"Missing local paired data branch {branch!r}. Set it up manually before publishing.")
+    if check_only:
+        result["status"] = "ok"
+        return
+
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    author, email = (config[key] for key in ("author", "email"))
+    for value in (author, email):
+        if not isinstance(value, str) or not value.strip() or any(
+            character in value for character in "\r\n\0<>"
+        ):
+            raise ValueError("Invalid Git identity in git-config.json.")
+    identity = ("-c", f"user.name={author}", "-c", f"user.email={email}")
+
     if any(entry.endswith(f"branch {branch_ref}") for entry in
            line("worktree", "list", "--porcelain").splitlines()):
         raise ValueError("The paired data branch is checked out in another worktree.")
@@ -176,10 +184,11 @@ def run(result, paths, message):
 def execute(value):
     result = {"status": "error", "commit": None, "pushed": False, "page_ids": []}
     try:
-        paths, message = validate_input(value)
+        check_only = value == {"check_only": True} and value.get("check_only") is True
+        paths, message = ([], None) if check_only else validate_input(value)
         if shutil.which("git") is None:
             raise ValueError("Git is required.")
-        run(result, paths, message)
+        run(result, paths, message, check_only=check_only)
     except subprocess.CalledProcessError as error:
         result["error"] = error.stderr[:1024].decode(errors="replace").strip() or (
             f"Git exited with status {error.returncode}."

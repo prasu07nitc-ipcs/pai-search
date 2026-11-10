@@ -8,7 +8,9 @@ Git commands time out individually after 60 seconds.
 Resolve the paired `data-<branch>` from the checked-out working branch. Use the
 working branch's configured remote, otherwise origin or the sole remote. Resolve
 a single push destination and use that destination for inspection and pushes.
-Require a named working branch and an existing local paired branch. Reject a
+Require a named working branch and an existing paired branch both locally and
+at the push destination. For `check_only`, report both checks and return before
+any writes. Reject a
 paired branch checked out in another worktree. Use a private index, preserve the
 working checkout and its index, and use git-config.json for commit identity.
 

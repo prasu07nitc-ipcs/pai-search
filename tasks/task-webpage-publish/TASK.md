@@ -33,6 +33,17 @@ component contracts. Use the existing runners and runtimes. The local paired dat
 branch must already exist under the [repository Git policy](../../AGENTS.md).
 Leave all Git inspection and writes to the Git transaction.
 
+When setting up the Publish chat, run this read-only preflight and report
+whether the paired branch exists locally and at the configured push destination.
+
+```sh
+transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{"check_only":true}'
+```
+
+If the remote branch is missing, warn the user to create the named branch
+manually on the reported remote before publishing. Report remote access errors
+separately. Rerun the check when the user asks to verify their setup.
+
 Serialize each complete input object as JSON and POSIX single-quote it, replacing
 each apostrophe with `'"'"'`. Use no shell interpolation or temporary input files.
 Use the declared runner, component name and timeout for each stage. The Git

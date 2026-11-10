@@ -11,8 +11,11 @@ be unique, literal repository-relative paths to regular, unaliased files in the
 allowed directories. An empty list is valid when there are no files to commit.
 The message must be a nonblank UTF-8 string without NUL characters.
 
-The runner accepts only `--transaction` and `--input`. If the local paired
-branch is missing, it names the branch and stops before contacting the remote.
+The runner accepts only `--transaction` and `--input`. For read-only setup
+validation, supply `{"check_only":true}` instead of the commit input. The result
+reports the branch, remote, and whether the branch exists locally and at the
+push destination. Both branches must exist for validation to succeed.
+Publishing also checks for both branches before making changes.
 
 The runner prints JSON and exits nonzero on error. Successful results identify
 `branch`, `remote`, and `verified_file_paths`. The result includes the new
