@@ -15,8 +15,8 @@ Use the repository root as the working directory. Read the
 [tool rules](../../.codex/rules/tools.rules),
 [transactions policy](../../transactions/AGENTS.md),
 [transaction rules](../../.codex/rules/transactions.rules), and the linked
-component contracts. Confirm commit and push authorization under the Git
-transaction policy before dispatch. Use the existing transaction and tool runtimes.
+component contracts. Use the existing transaction and tool runtimes.
+Apply the [shared publishing authorization](../AGENTS.md#shared-publishing-authorization).
 
 ```sh
 transactions/.venv/bin/python -B transactions/runner.py --transaction tx-webpage-search --input '{}' --timeout 20

@@ -6,7 +6,10 @@ the root of the target checkout. It requires Python 3.11+ and Git.
 It may read all of data/. Git commits and outgoing
 history may touch only data/articles/, data/index/, and data/queries/.
 
-Run only when authorized to commit and push. Use the checked-out branch and
+Run only when authorized to commit and push. For the Index and Publish tasks,
+require a matching allow under the
+[shared publishing authorization](../../tasks/AGENTS.md#shared-publishing-authorization).
+Use the checked-out branch and
 the same branch name on the remote. Use the branch's configured remote when
 available, otherwise origin or the sole remote. Detached HEAD and a missing
 repository or remote fail validation.

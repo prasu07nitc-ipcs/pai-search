@@ -33,6 +33,28 @@ runner stages use separate processes. Counts are task-specific. Preflight the de
 capacity, including the orchestrator's agent slot. Do not silently lower concurrency;
 report unavailable capacity before execution unless the user authorizes a change.
 
+## Shared publishing authorization
+
+Index and Publish share a checkout-local decision in
+`.tmp/publishing-authorization.json` (Git-ignored). Key each decision by canonical
+checkout path, verified branch, selected remote name, and SHA-256 of its effective
+push URL. Resolve the destination using the
+[Git transaction policy](../transactions/tx-git-commit/AGENTS.md) and read-only
+checkout metadata, including applicable configuration overrides and URL rewrites.
+If the destination cannot be verified, stop the authorization check.
+
+Only during environment setup, show the scope with credentials redacted and
+ask for an explicit allow or deny if no decision exists. Keep the current
+decision unless the user explicitly changes it during setup. Deny revokes allow
+for that scope. Store the digest instead of the URL. Use an atomic update to a
+regular unaliased file in a real directory and preserve other scope entries.
+
+When Git is ready to dispatch, resolve the scope and read the decision once.
+Only a valid matching allow authorizes commit and push of the task's accepted
+output paths. Otherwise report the reason, retain local artifacts, and mark Git
+and dependent cleanup as not run. Task runs neither prompt for nor change
+authorization. Platform approvals still apply.
+
 ## Prepare once, isolate each input
 
 Start preparation timing before setup. Batch independent reads of required policies,
