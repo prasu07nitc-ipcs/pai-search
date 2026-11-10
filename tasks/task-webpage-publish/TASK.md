@@ -69,10 +69,14 @@ Ignore files outside the selected artifact layouts.
   cleanup. Do the same if a later failed record indicates a partial write to
   that set. Keep valid local candidates in `F` for publication.
 
-`M` is `search-queries-<date>` or `webpage-index-<date>` for the selected branch.
+`M` is `Search | <count> | <date>` or `Index | <count> | <date>` for the
+selected branch. Count distinct run IDs for Search and distinct page IDs for
+Index across all files in `F`, including candidates from earlier failed pushes.
+Use `0` for an empty batch. Use the invocation date in `mm-dd-yy` as defined above.
 Always dispatch Git after successful preparation, including when export returns
 no new files or `F` is empty. Git compares the selected content with the paired
-branch, verifies outgoing paths, and handles eligible push retries and no-ops.
+branch, validates paths changed by the current commit, and handles push retries
+and no-ops.
 
 Accept Git only on a successful process exit and transaction result, with
 `verified_file_paths` matching `F` exactly as a set. Derive cleanup inputs

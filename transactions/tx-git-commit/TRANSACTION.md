@@ -8,8 +8,7 @@
 
 Supply inline JSON with exactly `file_paths` and `commit_message`. Paths must
 be unique, literal repository-relative paths to regular, unaliased files in the
-allowed directories. Include all paths touched by pending commits when retrying
-a push. An empty list is valid when there are no pending file changes.
+allowed directories. An empty list is valid when there are no files to commit.
 The message must be a nonblank UTF-8 string without NUL characters.
 
 The runner accepts only `--transaction` and `--input`. If the local paired

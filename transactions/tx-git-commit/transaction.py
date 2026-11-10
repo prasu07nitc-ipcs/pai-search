@@ -42,25 +42,9 @@ def check_paths(paths, scope):
             raise ValueError(f"Path outside commit scope: {os.fsdecode(path)!r}")
 
 
-def tree_files(commit):
-    return git("ls-tree", "-r", "--name-only", "-z", commit).split(b"\0")
-
-
 def changes(parent, commit):
     return git("diff-tree", "-r", "--no-commit-id", "--name-only",
                "--no-renames", "-z", parent, commit).split(b"\0")
-
-
-def verify_history(head, base, paths):
-    selected = set(map(os.fsencode, paths))
-    for entry in line("rev-list", "--parents", f"{base}..{head}").splitlines():
-        commit, *parents = entry.split()
-        if len(parents) != 1:
-            raise ValueError(f"Unexpected parent history in outgoing commit {commit}.")
-        unexpected = set(changes(parents[0], commit)) - selected - {b""}
-        if unexpected:
-            raise ValueError(f"Outgoing commit {commit} touches unlisted paths: "
-                             f"{sorted(map(os.fsdecode, unexpected))!r}")
 
 
 def validate_input(value):
@@ -106,8 +90,6 @@ def run(result, paths, message):
 
     if Path(line("rev-parse", "--show-toplevel")).resolve() != PROJECT:
         raise ValueError("Run from the root of the target repository.")
-    if line("rev-parse", "--is-shallow-repository") == "true":
-        raise ValueError("A full checkout is required to validate outgoing history.")
     source_ref = line("symbolic-ref", "HEAD")
     source = source_ref.removeprefix("refs/heads/")
     if not source_ref.startswith("refs/heads/") or source.startswith("data-"):
@@ -146,51 +128,13 @@ def run(result, paths, message):
         entry.split("\t", 1) for entry in advertised.splitlines()
     )}
     tip = heads.get(branch_ref, "")
-    main = heads.get("refs/heads/main")
-    if not main:
-        raise ValueError("The remote has no main branch.")
-    for oid in sorted({main, tip} - {""}):
-        kind = git("cat-file", "--batch-check=%(objecttype)", input_bytes=(oid + "\n").encode())
-        if kind != b"commit\n":
-            git("fetch", "--no-tags", "--no-recurse-submodules",
-                "--no-write-fetch-head", "--", destination, oid)
-    roots = line("rev-list", "--first-parent", "--max-parents=0", main).splitlines()
-    if len(roots) != 1:
-        raise ValueError("Could not verify the first commit on main.")
-    seed = roots[0]
-
     if any(entry.endswith(f"branch {branch_ref}") for entry in
            line("worktree", "list", "--porcelain").splitlines()):
         raise ValueError("The paired data branch is checked out in another worktree.")
     head = previous
-    git("merge-base", "--is-ancestor", seed, head)
-    if tip:
-        git("merge-base", "--is-ancestor", tip, head)
-        check_paths(tree_files(tip), SCOPE)
-
     new_commit = None
     with tempfile.TemporaryDirectory(prefix="pai-data-index-") as temp:
         index = Path(temp) / "index"
-        git("read-tree", seed, index=index)
-        inherited = tree_files(seed)
-        prefixes = tuple(os.fsencode(directory + "/") for directory in SCOPE)
-        removals = [path for path in inherited if path and not path.startswith(prefixes)]
-        if removals:
-            git("update-index", "--force-remove", "-z", "--stdin",
-                input_bytes=b"\0".join(removals) + b"\0", index=index)
-        clean_tree = os.fsdecode(git("write-tree", index=index)).strip()
-        base = seed
-        if removals:
-            if head == seed:
-                raise ValueError("The paired data branch contains inherited non-data files.")
-            lineage = line("rev-list", "--first-parent", "--reverse", f"{seed}..{head}")
-            base = lineage.splitlines()[0]
-            if (line("rev-list", "--parents", "-n", "1", base).split() != [base, seed]
-                    or line("rev-parse", f"{base}^{{tree}}") != clean_tree):
-                raise ValueError("The paired data branch has an invalid setup commit.")
-        check_paths(tree_files(head), SCOPE)
-        git("merge-base", "--is-ancestor", base, head)
-        verify_history(head, tip or base, paths)
         git("read-tree", head, index=index)
         check_selected_files(paths)
         for path in paths:
@@ -219,7 +163,7 @@ def run(result, paths, message):
     result.update(branch=branch, remote=remote, commit=new_commit)
     if head != tip:
         git("push", "--no-follow-tags", "--recurse-submodules=no",
-            f"--force-with-lease={branch_ref}:{tip}", "--", destination,
+            "--", destination,
             f"{head}:{branch_ref}")
         result["pushed"] = True
     advertised_tip = line("ls-remote", "--heads", "--", destination, branch_ref)
