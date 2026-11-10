@@ -82,14 +82,10 @@ Set up PAI Search from the repository root and follow AGENTS.md.
    tools/.venv/bin/python -m pip check
    tools/.venv/bin/python -B tools/runner.py --help
    transactions/.venv/bin/python -B transactions/runner.py --help
-5. Apply the shared publishing authorization in tasks/AGENTS.md.
-6. Report the Python version, verification results, publishing decision, and blockers.
+5. Report the Python version, verification results, and blockers.
 ```
 
 After Codex verifies both environments, use the starter messages below.
-Index and Publish share the [setup decision](tasks/AGENTS.md#shared-publishing-authorization)
-for the same checkout and destination. To revoke or restore permission, rerun
-environment setup and explicitly choose deny or allow.
 
 ## How to Run/Execute the Use Cases
 
@@ -172,8 +168,7 @@ task-webpage-search-publish
 ```
 
 > [!NOTE]
-> **Run a search in Search chat first so there’s a saved report to publish.
-> Publish uses the same setup authorization as Index.**
+> **Run a search in Search chat first so there’s a saved report to publish.**
 
 The [publish task](tasks/task-webpage-search-publish/TASK.md) exports saved search
 reports as Markdown files under `data/queries/`, commits those files, and pushes

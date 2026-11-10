@@ -35,7 +35,7 @@ prefix_rule(
     decision = "allow",
     justification = "Allow the scoped Git transaction to connect to its configured remote",
     match = [
-        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{\"file_paths\":[\"data/queries/example.md\"]}'",
+        "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --input '{\"file_paths\":[\"data/queries/example.md\"],\"commit_message\":\"Save search results\"}'",
     ],
     not_match = [
         "transactions/.venv/bin/python -B transactions/runner.py --transaction tx-git-commit --worker",

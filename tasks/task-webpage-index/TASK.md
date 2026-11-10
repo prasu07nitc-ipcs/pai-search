@@ -54,7 +54,6 @@ total invocation time. Agent stages have no task-imposed timeout or invented run
 
 Use the [Git transaction contract](../../transactions/tx-git-commit/TRANSACTION.md)
 for result acceptance. A successful Git no-op also unlocks cleanup.
-Apply the [shared publishing authorization](../AGENTS.md#shared-publishing-authorization).
 Skill cleanup targets only the accepted context output for this invocation,
 including a legacy output if that was the accepted path.
 An explicit task rerun bypasses tool caches, including entries for outputs
