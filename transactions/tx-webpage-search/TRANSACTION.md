@@ -1,6 +1,6 @@
 Name: tx-webpage-search
 
-Description: Export saved webpage search reports with References sections removed and filesystem paths validated and written relative to the repository root with a data/ prefix.
+Description: Export saved webpage search reports as query records listing cited entities and original URLs from referenced article metadata.
 
 Entry point: `transaction.py:export_searches() -> dict`
 

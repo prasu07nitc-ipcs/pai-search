@@ -407,6 +407,10 @@ def worker(transaction_name, value, run_id=None, data_directory=None):
         if source_directory.resolve() != source_directory or not source_directory.is_dir():
             raise ValueError("Invalid webpage search output directory.")
         rules.append('(allow file-read* (subpath ' + json.dumps(str(source_directory)) + '))')
+        articles = DATA / "articles"
+        if articles.resolve() != articles:
+            raise ValueError("Invalid webpage article directory.")
+        rules.append('(allow file-read* (subpath ' + json.dumps(str(articles)) + '))')
     if transaction_name == "tx-webpage-index":
         zone_file = Path("/usr/share/zoneinfo/Asia/Kolkata").resolve()
         rules.append('(allow file-read* (literal ' + json.dumps(str(zone_file)) + '))')

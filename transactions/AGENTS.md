@@ -47,11 +47,12 @@ IDNA hostname, retain www, strip trailing DNS dot/port, replace dots with unders
 | Transaction | Consumed files | Owned output below data/ |
 | --- | --- | --- |
 | tx-webpage-index | contexts, article with metadata footer | articles/<domain>/<page_id>.md and index/<domain>/<normalized_entity>/<page_id>.md |
-| tx-webpage-search | saved reports in the search skill output folder | queries/<run_id>.md |
+| tx-webpage-search | saved reports in the search skill output folder and articles named in their References | queries/<run_id>.md |
 
 Workers may read runtime/implementation files and their literal consumed sources.
 `tx-webpage-search` also has read-only access to
-`skills/skill-webpage-search/output/` to discover reports. Its sibling
+`skills/skill-webpage-search/output/` to discover reports and to `data/articles/` to read metadata from referenced
+articles. The exporter opens only articles explicitly cited in References. Its sibling
 `input/` and `logs/` directories remain outside that grant. Other transactions
 have no producer-directory grants. Workers have no unused-input grants, network
 or subprocess access. Writes

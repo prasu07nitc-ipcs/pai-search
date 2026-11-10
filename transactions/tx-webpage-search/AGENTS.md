@@ -14,12 +14,19 @@ The final Query ID must match the filename. Reject duplicate IDs and validate ev
 before publication. Hold the destination directory lock from discovery through
 publication so concurrent exports skip reports already written.
 
-Export each selected report to `data/queries/<run_id>.md`. Omit References
-sections, including their nested content. In every retained section, file
-paths must be repository-relative and start with `data/`. Rewrite absolute
-paths under this repository's `data/` directory to that form. Reject the
-export if any remaining file path falls outside that form or contains
-traversal segments. Preserve web URLs.
+Export each selected report to `data/queries/<run_id>.md` with Query,
+Entities, Webpages, Execution time, and Query ID sections. Under Entities, list
+only entity headings from utterance citations in Response, omitting sequence
+numbers and deduplicating in first-citation order. Under Webpages, list the
+page IDs as links to their original URLs in first-reference order, deduplicated
+by URL. Use the referenced article filename stem as the page ID. For each article
+link in References, read the linked regular, unaliased file under
+`data/articles/` and extract its `url` field from `## Meta Data`. Reject missing
+or invalid references and URLs. Leave either list empty if it has no entries.
+Omit the response prose, References, and the reviewed index files list.
+Validate retained file paths as repository-relative paths under `data/`, rewriting
+absolute paths within the repository's `data/` directory. Preserve web URLs.
+
 The scan includes saved handled failures because the source scope contains
 reports without execution statuses. Stage all destinations before replacing
 any. Return output paths in run ID order and `meta_data.report_count` on
