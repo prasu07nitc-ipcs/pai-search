@@ -71,8 +71,8 @@ An explicit task rerun bypasses tool caches. The context skill retains its page-
 
 ## Result
 
-Report V.page_id and link the saved article and entity index files from W.
-The article is the first path in W, followed by any entity index files. Report
-the number of entity files and link Context. Use the shared timing, failure
+Report V.page_id, link the saved article (the first path in W), and link Context.
+Summarize entity indexing by reporting only the number of entity index files
+that follow the article in W. Use the shared timing, failure
 reporting, and report persistence rules. The saved files are ready for the
 Index branch of [task-webpage-publish](../task-webpage-publish/TASK.md).

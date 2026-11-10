@@ -53,6 +53,18 @@ regular, singly linked files with no symlinked ancestors. A missing data directo
 is empty. Reject unsafe or malformed candidate paths before dispatching Git.
 Ignore files outside the selected artifact layouts.
 
+Create the candidate scanner and its accumulator together for each invocation.
+The scanner must return the paths it discovered. Assign that return value to
+the current invocation's `F`; never let a retained scanner append to an
+orchestrator variable from an earlier invocation. Retain setup contracts and
+command templates only, not scanner closures or candidate arrays.
+
+Before dispatching Git for Index, compare `F` with a fresh read-only enumeration
+of Markdown files at the two candidate depths, without following symlinks.
+If the sets differ, including when `F` is empty but the check finds candidates,
+stop before Git and report the mismatch. An empty batch is valid when both
+enumerations are empty.
+
 - **Search**. Inspect `data/queries/<run_id>.md`. Require a 64-character lowercase
   hexadecimal stem and a final Query ID section matching it. Validate that all
   paths returned by the exporter are included. Record each component-produced
