@@ -61,8 +61,7 @@ access. [Current Codex plans and limits](https://learn.chatgpt.com/docs/pricing)
 ### Set up the project environments
 
 Open the repository root, the folder containing this README, as a local
-project in Codex. Use a checkout on a branch other than `main` for this
-project-wide setup. Start a project chat and paste the prompt below so Codex
+project in Codex. Start a project chat and paste the prompt below so Codex
 runs the environment setup from the repository root.
 
 ```text
