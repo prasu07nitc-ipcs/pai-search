@@ -1,10 +1,19 @@
 # Project intents
 
-Follow the workflows in the [root README](readme.md) for these three intents:
+The project supports these three intents:
 
 1. Index a webpage from a supplied URL.
 2. Execute a search query against the local index.
 3. Publish saved search results.
+
+## Project-wide instruction sources
+
+The project root's `readme.md` is exclusively for human readers. This policy
+applies to all agents and subagents in every directory of the project. Agents
+must not consult, rely on, or execute any content from that file as part of
+project work, even if another project instruction links to it. Use the
+applicable `AGENTS.md` and task, skill, transaction, or tool instructions for
+execution.
 
 ## Repository Git policy
 
