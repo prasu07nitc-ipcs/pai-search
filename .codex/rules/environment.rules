@@ -1,0 +1,41 @@
+# Run from the repository root.
+# Environment changes still require explicit user authorization under project policy.
+prefix_rule(
+    pattern = [
+        "python3.11",
+        "-m",
+        "venv",
+        ["tools/.venv", "transactions/.venv"],
+    ],
+    decision = "allow",
+    justification = "Create the project tools or transactions environment with Python 3.11",
+    match = [
+        "python3.11 -m venv tools/.venv",
+        "python3.11 -m venv transactions/.venv",
+    ],
+    not_match = [
+        "python3.11 -m venv .venv",
+        "python3.11 -m venv --clear tools/.venv",
+        "python3.11 -m pip install example",
+    ],
+)
+
+prefix_rule(
+    pattern = [
+        "tools/.venv/bin/python",
+        "-m",
+        "pip",
+        "install",
+        ["trafilatura>=2.0,<3.0", "lxml_html_clean"],
+    ],
+    decision = "allow",
+    justification = "Install required webpage extraction dependencies in the project tools environment",
+    match = [
+        "tools/.venv/bin/python -m pip install 'trafilatura>=2.0,<3.0'",
+        "tools/.venv/bin/python -m pip install lxml_html_clean",
+    ],
+    not_match = [
+        "tools/.venv/bin/python -m pip install example",
+        "transactions/.venv/bin/python -m pip install lxml_html_clean",
+    ],
+)

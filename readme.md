@@ -31,7 +31,7 @@ the use case you want to run.
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to tasks sub-project and load task-webpage-index. Name the chat thread as **Index**.
+> set the context to tasks sub-project, prepare the environment with all dependencies, load task-webpage-index and validate the environment if the task can be run. Name the chat thread as **Index**.
 
 The starter message sets the chat context to the `tasks` sub-project and loads
 the `task-webpage-index` instructions. The chat is then ready to accept an
@@ -60,7 +60,7 @@ the task commits those files and pushes the commit to the remote Git repository.
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to skills sub-project and load skill-webpage-search. Rename the chat thread as **Search**.
+> set the context to skills sub-project, prepare the environment with all dependencies, load skill-webpage-search and validate the environment if the task can be run. Rename the chat thread as **Search**.
 
 The starter message sets the chat context to the `skills` sub-project and loads
 the `skill-webpage-search` instructions. The chat is then ready to search your
