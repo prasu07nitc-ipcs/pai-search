@@ -1,0 +1,13 @@
+.idea/*
+reports/*
+dev-tasks/*
+transactions/.venv/
+transactions/**/__pycache__/
+.tmp/
+transactions/**/logs/
+data/.venv/
+data/**/__pycache__/
+data/index/*
+data/articles/*
+data/bookmark/*
+/data/queries/
