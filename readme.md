@@ -1,9 +1,45 @@
 # Personal Assistive Intelligence (PAI) Search
 
-PAI Search builds a local, searchable collection of web articles from URLs you
-provide. It extracts article content, saves it as Markdown, and indexes it by
-entity so you can ask questions across the collection and trace answers back to
-the source articles.
+A search engine retrieves relevant information from a collection in response
+to a query. It typically builds an index that lets it find and rank content
+across a collection, whether that collection is the public web or a personal
+library.
+
+It acts as a virtual bridge between people looking for information and the
+people or organisations that produce it. The service provider builds and
+maintains the search engine. The bridge itself forms at query time, when the
+engine connects a person with the producers whose content is relevant to that
+particular request.
+
+Before large language models (LLMs), building and maintaining this bridge
+called for specialist engineering. Even when people typed queries in everyday
+language, engineers had to design ways to represent documents and queries so
+software could compare and rank them. LLMs make some of those
+language-processing capabilities accessible through open-source models and
+hosted inference services. At personal scale, this lowers the cost and
+technical effort of building and maintaining a search engine.
+
+The economic value is that individuals can operate a search engine on their
+own terms. They can choose which sources to include, decide how to search and
+share their collection, and rely on their own index to find information. That
+gives them more control over the time they invest in finding, organising, and
+reusing knowledge. It also opens up three possibilities.
+
+- **Unified Personal Knowledge Repository** — Organise what you know, what
+  you’ve discovered and experienced, and the questions you’re still exploring.
+- **Automated, Asynchronous, and Contextual Knowledge Transfer** — Authorise
+  an AI representative to answer other people’s questions using selected
+  knowledge and experiences. It can respond in context while you’re away,
+  within the permissions you set.
+- **Dynamic Social Networking** — Discover people whose knowledge, interests,
+  or experiences are relevant to what you’re exploring, or whose questions you
+  can help answer. As people’s interests and needs change, new connections can
+  emerge.
+
+PAI Search is that personal search engine. It builds a local, searchable
+collection of web articles from URLs you provide. It extracts article content,
+saves it as Markdown, and indexes it by entity so you can ask questions across
+the collection and trace answers back to the source articles.
 
 ## Use Cases
 
@@ -19,8 +55,8 @@ indexed. Answers cite the source articles.
 
 ### Publish search queries
 
-Export saved search reports as Markdown under `data/queries/`. The publish task
-commits and pushes those files to the remote repository.
+Export saved search reports as Markdown under `data/queries/`. The publish
+task commits and pushes those files to the remote repository.
 
 ## Project Setup
 
@@ -37,7 +73,8 @@ commits and pushes those files to the remote repository.
 
 Sign in with a ChatGPT account. The Free plan can run Codex in the desktop app
 where access has rolled out. Paid plans offer different usage limits and model
-access. [Current Codex plans and limits](https://learn.chatgpt.com/docs/pricing)
+access.
+[Current Codex plans and limits](https://learn.chatgpt.com/docs/pricing)
 
 ### Install the desktop app on macOS
 
@@ -54,9 +91,9 @@ access. [Current Codex plans and limits](https://learn.chatgpt.com/docs/pricing)
 2. Run `git --version` if you need to clone the repository or publish results.
    If Git is unavailable, run `xcode-select --install` in Terminal and follow
    the prompts to install Apple's Command Line Tools.
-3. Clone the repository to a local folder, or use your existing checkout.
-   For publishing, use a checkout with a configured remote and credentials
-   that allow pushes to it.
+3. Clone the repository to a local folder, or use your existing checkout. For
+   publishing, use a checkout with a configured remote and credentials that
+   allow pushes to it.
 
 ### Set up the project environments
 
@@ -99,7 +136,9 @@ the use case you want to run.
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to tasks sub-project, prepare the environment with all dependencies, load task-webpage-index and validate the environment if the task can be run. Name the chat thread as **Index**.
+> set the context to tasks sub-project, prepare the environment with all
+> dependencies, load task-webpage-index and validate the environment if the
+> task can be run. Name the chat thread as **Index**.
 
 The starter message sets the chat context to the `tasks` sub-project and loads
 the `task-webpage-index` instructions. The chat is then ready to accept an
@@ -116,22 +155,25 @@ Add https://example.com/article to my personal index.
 ```
 
 > [!NOTE]
-> **Include only one URL per message. You can send multiple messages in the same
-> chat without waiting for each one to finish. The messages queue up, and the
-> chat indexes their URLs one at a time in the order you sent them.**
+> **Include only one URL per message. You can send multiple messages in the
+> same chat without waiting for each one to finish. The messages queue up, and
+> the chat indexes their URLs one at a time in the order you sent them.**
 
 The [indexing task](tasks/task-webpage-index/TASK.md) saves the article under
-`data/articles/` and its entity indexes under `data/index/`. Use the Index choice in the Publish chat to publish those files.
+`data/articles/` and its entity indexes under `data/index/`. Use the Index
+choice in the Publish chat to publish those files.
 
 ### Search the personal index
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to skills sub-project, prepare the environment with all dependencies, load skill-webpage-search and validate the environment if the task can be run. Rename the chat thread as **Search**.
+> set the context to skills sub-project, prepare the environment with all
+> dependencies, load skill-webpage-search and validate the environment if the
+> task can be run. Rename the chat thread as **Search**.
 
-The starter message sets the chat context to the `skills` sub-project and loads
-the `skill-webpage-search` instructions. The chat is then ready to search your
-personal index when you send a query.
+The starter message sets the chat context to the `skills` sub-project and
+loads the `skill-webpage-search` instructions. The chat is then ready to
+search your personal index when you send a query.
 
 Rename the chat to **Search** and reuse it for future searches.
 
@@ -147,19 +189,23 @@ Compare what my indexed articles say about lithium-ion and sodium-ion batteries.
 > **Search draws from webpages you’ve already indexed. Index relevant pages in
 > Index chat before asking about a topic that isn’t in your collection yet.**
 
-The [search skill](skills/skill-webpage-search/SKILL.md) looks for relevant entity
-entries in `data/index/`. It follows those entries to the corresponding Markdown
-articles in `data/articles/` and uses the article content to formulate the answer.
+The [search skill](skills/skill-webpage-search/SKILL.md) looks for relevant
+entity entries in `data/index/`. It follows those entries to the corresponding
+Markdown articles in `data/articles/` and uses the article content to
+formulate the answer.
 
-Inline citations point to the index files in `data/index/` that support individual
-claims. The references section links to the source articles in `data/articles/`.
-The skill also saves a Markdown search report for later publishing.
+Inline citations point to the index files in `data/index/` that support
+individual claims. The references section links to the source articles in
+`data/articles/`. The skill also saves a Markdown search report for later
+publishing.
 
 ### Publish search queries
 
 Open a new chat in the project and paste the starter message below.
 
-> set the context to tasks sub-project and load task-webpage-publish. Run its read-only paired data branch check and report whether Publish is ready. Rename the chat thread as **Publish**.
+> set the context to tasks sub-project and load task-webpage-publish. Run its
+> read-only paired data branch check and report whether Publish is ready.
+> Rename the chat thread as **Publish**.
 
 The starter message loads the publishing task instructions. Rename the chat to
 **Publish** and reuse it to publish saved search reports or webpage indices.
@@ -174,11 +220,11 @@ task-webpage-publish
 
 The [publish task](tasks/task-webpage-publish/TASK.md) ends its turn with a
 prompt. Select **Search**, **Index**, or **Skip** in the control, or send the
-choice as your next chat message. Skip
-cancels the invocation. Search exports saved reports to `data/queries/`. Index
-uses locally saved articles and entity index files. The task commits and pushes
-the selected files to the working branch's existing paired `data-<branch>` and
-cleans up corresponding source artifacts after remote verification.
+choice as your next chat message. Skip cancels the invocation. Search exports
+saved reports to `data/queries/`. Index uses locally saved articles and entity
+index files. The task commits and pushes the selected files to the working
+branch's existing paired `data-<branch>` and cleans up corresponding source
+artifacts after remote verification.
 
 ## What to Expect After a Successful Run
 
@@ -191,16 +237,17 @@ for local searches and for the **Index** option in Publish.
 
 #### Worked example
 
-Use the saved [Personal Assistive Intelligence article](https://www.linkedin.com/pulse/personal-assistive-intelligence-portable-networked-sushant-pradhan-rcoqf)
+Use the saved
+[Personal Assistive Intelligence article](https://www.linkedin.com/pulse/personal-assistive-intelligence-portable-networked-sushant-pradhan-rcoqf)
 from LinkedIn. Its page ID is:
 
 ```text
 19bbd9e1748883815cecde97c674608cf4356380f5b7e7a81d2edd3dc3e6e198
 ```
 
-The URL's hostname, `www.linkedin.com`, becomes the folder
-`www_linkedin_com`. The saved example has one article file and 16 entity files.
-Here are the article and two of the entity files:
+The URL's hostname, `www.linkedin.com`, becomes the folder `www_linkedin_com`.
+The saved example has one article file and 16 entity files. Here are the
+article and two of the entity files:
 
 ```text
 data/articles/www_linkedin_com/19bbd9e1748883815cecde97c674608cf4356380f5b7e7a81d2edd3dc3e6e198.md
@@ -241,8 +288,8 @@ Personal Assistive Intelligence: Personal, Portable, and Networked
 ```
 
 An **entity file** holds the passages indexed under that topic. The
-`portability` folder contains this page's Portability entry. Here is its
-first block, with the passage shortened for this example:
+`portability` folder contains this page's Portability entry. Here is its first
+block, with the passage shortened for this example:
 
 ```markdown
 # Portability
@@ -255,18 +302,18 @@ first block, with the passage shortened for this example:
 ```
 
 `4/16` means this passage was fourth among the 16 passages indexed for the
-whole article. `Concept` is the category assigned to the passage.
-`Indexed At` records when Index wrote the entry, and `Last Validated At`
-comes from the article's recorded modification date. If several passages
-cover the same entity, they appear as separate blocks in its file.
+whole article. `Concept` is the category assigned to the passage. `Indexed At`
+records when Index wrote the entry, and `Last Validated At` comes from the
+article's recorded modification date. If several passages cover the same
+entity, they appear as separate blocks in its file.
 
 #### Verify the page ID and files
 
 The page ID is the SHA-256 hash of the exact requested URL. Anyone hashing
 that same URL text gets the same ID on any machine. The ID is practically
-unique to that URL because SHA-256 collisions are extraordinarily unlikely.
-A change to the URL text, such as adding a trailing slash, changes the ID
-even if the browser opens the same article.
+unique to that URL because SHA-256 collisions are extraordinarily unlikely. A
+change to the URL text, such as adding a trailing slash, changes the ID even
+if the browser opens the same article.
 
 Run these commands from the repository root:
 
@@ -278,11 +325,11 @@ ls "data/articles/www_linkedin_com/$page_id.md"
 find data/index/www_linkedin_com -type f -name "$page_id.md" -print
 ```
 
-Compare the printed ID with the ID above and in the article footer. The
-`ls` command should show one article file, and `find` should list 16 paths
-for this saved example. When checking another run, compare the number of
-matching paths with the entity file count in the Index chat. A run with
-zero entity files saves just the article.
+Compare the printed ID with the ID above and in the article footer. The `ls`
+command should show one article file, and `find` should list 16 paths for this
+saved example. When checking another run, compare the number of matching paths
+with the entity file count in the Index chat. A run with zero entity files
+saves just the article.
 
 ### Search — Answer and saved report
 
@@ -300,9 +347,9 @@ full saved article.
 
 #### Find and read the saved report
 
-Search saves a Markdown report under the search skill's `output/` folder.
-The filename uses the query's run ID. The article's page ID still appears
-in the filenames that the response cites.
+Search saves a Markdown report under the search skill's `output/` folder. The
+filename uses the query's run ID. The article's page ID still appears in the
+filenames that the response cites.
 
 ```text
 skills/
@@ -335,22 +382,22 @@ Portability lets an assistant carry useful knowledge, preferences, and decision 
 816107f59c74057aa083108182a3e3267294ae2c7e86141533755a4694023b11
 ```
 
-**Response** contains what you see in the chat. **Index Files Analysed**
-also records files Search reviewed but did not cite. **Execution time**
-records when the run started in UTC. **Query ID** matches the report filename.
+**Response** contains what you see in the chat. **Index Files Analysed** also
+records files Search reviewed but did not cite. **Execution time** records
+when the run started in UTC. **Query ID** matches the report filename.
 
 #### Verify the answer and report
 
 1. Open the inline citation in the Search chat and check that its passage
-   supports the answer. Then open the article under **References** to read
-   the passage in context.
+   supports the answer. Then open the article under **References** to read the
+   passage in context.
 2. Open the report in `skills/skill-webpage-search/output/`. Check that
    **Query** matches what you sent, **Response** matches the chat answer, and
    **Query ID** matches the filename.
 3. Use **Search** in Publish to export the saved report to `data/queries/`.
 
-If no indexed article supports the query, Search reports that outcome in
-the chat and saves it in the Markdown report.
+If no indexed article supports the query, Search reports that outcome in the
+chat and saves it in the Markdown report.
 
 ### Publish — Files verified on the remote branch
 
@@ -359,13 +406,13 @@ the chat and saves it in the Markdown report.
 In the **Publish** chat, run `task-webpage-publish` and select **Index** to
 publish the LinkedIn article and its entity files. Run the task again and
 select **Search** to publish the saved report about portability. Each choice
-publishes a batch, so the remote can also receive other prepared files of
-the selected type.
+publishes a batch, so the remote can also receive other prepared files of the
+selected type.
 
-Publish uses the existing paired branch. For example, if the working branch
-is `main`, look for the files on `data-main` in the remote repository. After
-both choices complete, the remote branch can contain these files from the
-worked example. The tree shows two of the article's 16 entity files.
+Publish uses the existing paired branch. For example, if the working branch is
+`main`, look for the files on `data-main` in the remote repository. After both
+choices complete, the remote branch can contain these files from the worked
+example. The tree shows two of the article's 16 entity files.
 
 ```text
 data/
@@ -382,21 +429,22 @@ data/
     └── 816107f59c74057aa083108182a3e3267294ae2c7e86141533755a4694023b11.md
 ```
 
-The article and entity files keep their page ID and Markdown contents.
-The query file keeps the report's query ID and contains the query, response,
-reviewed index files, execution time, and query ID shown in the Search example.
+The article and entity files keep their page ID and Markdown contents. The
+query file keeps the report's query ID and contains the query, response,
+reviewed index files, execution time, and query ID shown in the Search
+example.
 
 #### Verify the files on the remote
 
 1. In the Publish chat, check the selected type, batch IDs, verified file
    links, remote, branch, and commit ID. The status tells you whether Publish
    pushed a change or verified that the remote already had the files.
-2. Open the remote repository and switch to the branch named in the chat.
-   For **Index**, open the article and a corresponding entity file. Check
-   that the two filenames share the page ID. For **Search**, open the file
-   in `data/queries/` and check that the **Query ID** at the bottom matches
-   the filename and **Query** contains the portability question.
+2. Open the remote repository and switch to the branch named in the chat. For
+   **Index**, open the article and a corresponding entity file. Check that the
+   two filenames share the page ID. For **Search**, open the file in
+   `data/queries/` and check that the **Query ID** at the bottom matches the
+   filename and **Query** contains the portability question.
 3. Check the cleanup summary in the Publish chat. After remote verification,
    Publish can remove eligible intermediate files from Index or the local
-   search report that it exported. The summary reports what was removed
-   and any cleanup still pending.
+   search report that it exported. The summary reports what was removed and
+   any cleanup still pending.
